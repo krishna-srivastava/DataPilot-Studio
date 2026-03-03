@@ -16,9 +16,9 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
 
 # ================= PAGE CONFIG =================
-st.set_page_config(page_title="DataPilot Studio", layout="wide")
+st.set_page_config(page_title="Smart EDA ML Studio", layout="wide")
 
-st.title("🚀 DataPilot Studio")
+st.title("🚀 Smart EDA ML Studio")
 st.markdown("Upload CSV → Analyze → Train Model")
 
 # ================= FILE UPLOAD =================
@@ -468,3 +468,4 @@ if file is not None:
                 st.info("Fix the above issues to enable model training.")
 else:
     st.info("Upload a CSV file to begin.")
+
