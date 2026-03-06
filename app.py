@@ -15,14 +15,10 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
 
-@st.cache_data
-def load_data(file):
-    return pd.read_csv(file, low_memory=False)
-
 # ================= PAGE CONFIG =================
-st.set_page_config(page_title="Smart EDA ML Studio", layout="wide")
+st.set_page_config(page_title="DataPilot Studio", layout="wide")
 
-st.title("🚀 Smart EDA ML Studio")
+st.title("🚀 DataPilot Studio")
 st.markdown("Upload CSV → Analyze → Train Model")
 
 # ================= FILE UPLOAD =================
@@ -34,7 +30,7 @@ if file is not None:
         st.error("File too large! Please upload file under 200MB.")
         st.stop()
 
-    df = load_data(file)
+    df = pd.read_csv(file)
 
     if len(df) > 200000:
         st.warning("Large dataset detected. Some operations may take time.")
@@ -472,5 +468,3 @@ if file is not None:
                 st.info("Fix the above issues to enable model training.")
 else:
     st.info("Upload a CSV file to begin.")
-
-
