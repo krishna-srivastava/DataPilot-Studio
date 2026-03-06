@@ -15,6 +15,11 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
 
+@st.cache_data
+def load_data(file):
+    df = pd.read_csv(file, engine="pyarrow")
+    return df
+
 # ================= PAGE CONFIG =================
 st.set_page_config(page_title="DataPilot Studio", layout="wide")
 
@@ -30,7 +35,7 @@ if file is not None:
         st.error("File too large! Please upload file under 200MB.")
         st.stop()
 
-    df = pd.read_csv(file)
+    df = load_data(file)
 
     if len(df) > 200000:
         st.warning("Large dataset detected. Some operations may take time.")
@@ -51,7 +56,7 @@ if file is not None:
         with eda_tab1:
 
             st.subheader("Dataset Preview")
-            st.dataframe(df.head())
+            st.dataframe(df.head(10))
 
             col1, col2 = st.columns(2)
 
