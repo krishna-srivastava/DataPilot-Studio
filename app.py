@@ -3,17 +3,20 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
-from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
-from sklearn.linear_model import LogisticRegression, LinearRegression
-from sklearn.svm import SVC, SVR
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.tree import DecisionTreeRegressor
+import io
+
+def download_chart(fig, key):
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    buf.seek(0)
+
+    st.download_button(
+        label="Download Chart",
+        data=buf,
+        file_name="chart.png",
+        mime="image/png",
+        key=key
+    )
 
 @st.cache_data
 def load_data(file):
@@ -24,452 +27,393 @@ def load_data(file):
 st.set_page_config(page_title="DataPilot Studio", layout="wide")
 
 st.title("🚀 DataPilot Studio")
-st.markdown("Upload CSV → Analyze → Train Model")
+st.markdown("Upload CSV → Explore Data → Generate Insights")
 
 # ================= FILE UPLOAD =================
-file = st.file_uploader("Upload CSV file", type=["csv"])
+file = st.file_uploader(
+    "Upload CSV file (Max size: 100MB)",
+    type=["csv"]
+)
 
 if file is not None:
 
-    if file.size > 200 * 1024 * 1024:
-        st.error("File too large! Please upload file under 200MB.")
+    if file.size > 100 * 1024 * 1024:
+        st.error("File too large! Please upload file under 100MB.")
         st.stop()
 
-    df = load_data(file)
+    # Detect new file upload
+    if "file_name" not in st.session_state or st.session_state.file_name != file.name:
+
+        st.session_state.file_name = file.name
+        st.session_state.original_df = load_data(file)
+        st.session_state.df = st.session_state.original_df.copy()
+
+    df = st.session_state.df
 
     if len(df) > 200000:
         st.warning("Large dataset detected. Some operations may take time.")
 
-    # ================= MAIN TABS =================
-    tab1, tab2 = st.tabs(["📊 EDA Section", "🤖 ML Section"])
-
-    # ============================================================
-    # ======================= EDA TAB =============================
-    # ============================================================
-    with tab1:
-
-        eda_tab1, eda_tab2, eda_tab3 = st.tabs(
-            ["Overview", "Column Analyzer", "Correlation"]
-        )
+    eda_tab1, eda_tab2, eda_tab3, eda_tab4, eda_tab5, eda_tab6 = st.tabs(
+    ["Overview", "Column Analyzer", "Correlation", "Visualization", "Data Cleaning", "Duplicate rows cleaner"]
+    )
 
         # ---------- OVERVIEW ----------
-        with eda_tab1:
+    with eda_tab1:
 
-            st.subheader("Dataset Preview")
-            st.dataframe(df.head(10))
+        st.subheader("Dataset Preview")
+        st.dataframe(df.head(10))
 
-            col1, col2 = st.columns(2)
+        col1, col2 = st.columns(2)
 
-            with col1:
-                st.write("Rows:", df.shape[0])
-                st.write("Columns:", df.shape[1])
-                st.write("Column Names:")
-                st.write(df.columns.tolist())
+        with col1:
+            st.write("Rows:", df.shape[0])
+            st.write("Columns:", df.shape[1])
+            st.write("Column Names:")
+            st.write(df.columns.tolist())
 
-            with col2:
-                st.write("Data Types:")
-                st.write(df.dtypes)
+        with col2:
+            st.write("Data Types:")
+            st.write(df.dtypes)
 
-            st.subheader("Statistical Summary")
-            st.write(df.describe(include="all"))
+        st.subheader("Statistical Summary")
+        st.write(df.describe(include="all"))
 
-            st.subheader("Missing Values")
-            missing = df.isnull().sum()
-            missing_percent = (missing / len(df)) * 100
+        st.subheader("Missing Values")
+        missing = df.isnull().sum()
+        missing_percent = (missing / len(df)) * 100
 
-            missing_df = pd.DataFrame({
-                "Missing Values": missing,
-                "Percentage (%)": missing_percent.round(2)
-            })
+        missing_df = pd.DataFrame({
+            "Missing Values": missing,
+            "Percentage (%)": missing_percent.round(2)
+        })
 
-            st.dataframe(missing_df[missing_df["Missing Values"] > 0])
+        st.dataframe(missing_df[missing_df["Missing Values"] > 0])
 
-            st.subheader("Duplicate Rows")
-            st.write("Total Duplicate Rows:", df.duplicated().sum())
+        st.subheader("Duplicate Rows")
+        st.write("Total Duplicate Rows:", df.duplicated().sum())
+
 
         # ---------- COLUMN ANALYZER ----------
-        with eda_tab2:
+    with eda_tab2:
 
-            column = st.selectbox("Select Column", df.columns)
+        column = st.selectbox("Select Column", df.columns)
 
-            colA, colB, colC = st.columns(3)
-            colA.metric("Data Type", str(df[column].dtype))
-            colB.metric("Missing Values", int(df[column].isnull().sum()))
-            colC.metric("Unique Values", int(df[column].nunique()))
+        missing_count = df[column].isnull().sum()
+        missing_percent = (missing_count / len(df)) * 100
+        unique_values = df[column].nunique()
 
-            if np.issubdtype(df[column].dtype, np.number):
+        colA, colB, colC, colD = st.columns(4)
+        colA.metric("Data Type", str(df[column].dtype))
+        colB.metric("Missing Values", int(missing_count))
+        colC.metric("Missing %", f"{missing_percent:.2f}%")
+        colD.metric("Unique Values", int(unique_values))
 
-                colD, colE, colF = st.columns(3)
-                colD.metric("Mean", round(df[column].mean(), 2))
-                colE.metric("Median", round(df[column].median(), 2))
-                colF.metric("Std Dev", round(df[column].std(), 2))
+        if np.issubdtype(df[column].dtype, np.number):
 
-                fig, ax = plt.subplots()
-                ax.hist(df[column].dropna(), bins=20)
-                st.pyplot(fig)
+            mean_val = df[column].mean()
+            median_val = df[column].median()
+            std_val = df[column].std()
+            min_val = df[column].min()
+            max_val = df[column].max()
+            skew_val = df[column].skew()
 
-                fig2, ax2 = plt.subplots()
-                ax2.boxplot(df[column].dropna())
-                st.pyplot(fig2)
+            colE, colF, colG = st.columns(3)
+            colE.metric("Mean", round(mean_val, 2))
+            colF.metric("Median", round(median_val, 2))
+            colG.metric("Std Dev", round(std_val, 2))
 
+            colH, colI, colJ = st.columns(3)
+            colH.metric("Min", round(min_val, 2))
+            colI.metric("Max", round(max_val, 2))
+            colJ.metric("Skewness", round(skew_val, 2))
+
+        else:
+
+            mode_val = df[column].mode()
+            if not mode_val.empty:
+                most_frequent = mode_val[0]
+                top_count = df[column].value_counts().iloc[0]
             else:
-                top_values = df[column].value_counts().head(10)
-                st.dataframe(top_values)
+                most_frequent = "N/A"
+                top_count = 0
 
-                fig3, ax3 = plt.subplots()
-                ax3.bar(top_values.index.astype(str), top_values.values)
-                plt.xticks(rotation=45)
-                st.pyplot(fig3)
+            colE, colF = st.columns(2)
+            colE.metric("Most Frequent Value", most_frequent)
+            colF.metric("Top Value Count", int(top_count))
+
+            top_values = df[column].value_counts().head(10)
+            st.subheader("Top 10 Values")
+            st.dataframe(top_values)
 
         # ---------- CORRELATION ----------
-        with eda_tab3:
+    with eda_tab3:
 
-            numeric_df = df.select_dtypes(include=np.number)
+        numeric_df = df.select_dtypes(include=np.number)
 
-            num_cols = numeric_df.shape[1]
+        num_cols = numeric_df.shape[1]
 
-            if num_cols < 2:
-                st.warning("Not enough numeric columns.")
+        if num_cols < 2:
+            st.warning("Not enough numeric columns.")
 
-            elif num_cols > 30:
-                st.warning(f"⚠ Too many numeric columns ({num_cols}). Skipping heatmap for performance reasons.")
-                st.info("Tip: Reduce features or use sampling for large datasets.")
+        elif num_cols > 25:
+            st.warning(f"⚠ Too many numeric columns ({num_cols}). Skipping heatmap for performance reasons.")
+            st.info("Tip: Reduce features or use sampling for large datasets.")
 
-            else:
-                corr = numeric_df.corr()
+        else:
+            corr = numeric_df.corr()
+            fig4, ax4 = plt.subplots(figsize=(8, 6))
+            sns.heatmap(corr, annot=True, cmap="coolwarm", ax=ax4)
+            st.pyplot(fig4)
+            download_chart(fig4, "corr_heatmap_download") 
+            plt.close(fig4)
 
-                fig4, ax4 = plt.subplots(figsize=(8, 6))
-                sns.heatmap(corr, annot=True, cmap="coolwarm", ax=ax4)
-                st.pyplot(fig4)
+    with eda_tab4:
+        chart_type = st.selectbox(
+            "Select Chart Type",
+            [
+                "Histogram",
+                "Box Plot",
+                "Bar Chart",
+                "Scatter Plot",
+                "Line Chart",
+                "Violin Plot",
+                "Pie Chart"
+            ]
+        )
 
-    # ============================================================
-    # ======================= ML TAB ==============================
-    # ============================================================
+        numeric_cols = df.select_dtypes(include=np.number).columns
 
-    with tab2:
-        st.subheader("🚀 ML Training Section")
-        
-        target = st.selectbox("Select Target Column", df.columns)
+        x_col = st.selectbox("Select X-axis", df.columns)
+        y_col = None
 
-        if target:
+        if chart_type in ["Scatter Plot", "Line Chart"]:
+            y_col = st.selectbox("Select Y-axis", df.columns)
 
-            X = df.drop(columns=[target])
-            y = df[target]
+        show_chart = st.button("Show Chart")
 
-            missing_count = X.isnull().sum().sum()
-            non_numeric_cols = X.select_dtypes(exclude=["number", "bool"]).columns.tolist()
+        if show_chart:
+            try:
 
-            dataset_valid = True
-            # 🔴 Small Dataset Protection
-            min_required_rows = 10
+                if chart_type == "Histogram":
 
-            if len(df) < min_required_rows:
-                st.error(f"❌ Dataset must have at least {min_required_rows} rows for training.")
-                dataset_valid = False
-
-            if missing_count > 0:
-                st.error(f"❌ Dataset contains {missing_count} missing values. Please clean your data.")
-                dataset_valid = False
-
-            elif len(non_numeric_cols) > 0:
-                st.error(f"❌ Non-numeric columns detected: {non_numeric_cols}. Please encode them.")
-                dataset_valid = False
-            else:
-                st.success("✅ Dataset is clean and ready for training.")
-
-
-           # 🔴 Safe Problem Type Detection
-            if y.dtype == "object" or str(y.dtype) == "category":
-                problem_type = "Classification"
-
-            elif np.issubdtype(y.dtype, np.number):
-                if y.nunique() <= 10:
-                    problem_type = "Classification"
-                else:
-                    problem_type = "Regression"
-
-            else:
-                st.error("❌ Unsupported target column type.")
-                dataset_valid = False
-                problem_type = None
-
-            # Show only if detected
-            if problem_type:
-                st.success(f"Detected Problem Type: {problem_type}")
-
-            # 🔴 Single Class Protection
-            if problem_type == "Classification" and y.nunique() < 2:
-                st.error("❌ Target column contains only ONE class. At least 2 classes are required for classification.")
-                dataset_valid = False
-
-            # 🔴 Regression Safety Double Check
-            if problem_type == "Regression" and not np.issubdtype(y.dtype, np.number):
-                st.error("❌ Regression requires numeric target column.")
-                dataset_valid = False
-
-            # Model selection
-            if problem_type == "Classification":
-                model_name = st.selectbox(
-                    "Select Model",
-                    ["Logistic Regression", "KNN", "Decision Tree", "Random Forest", "SVM"]
-                )
-            else:
-                model_name = st.selectbox(
-                    "Select Model",
-                    ["Linear Regression", "KNN Regressor", "Decision Tree Regressor", "Random Forest Regressor", "SVR"]
-                )
-
-            if model_name not in ["Linear Regression"]:
-                use_custom = st.checkbox("⚙️ Use Custom Hyperparameters")
-
-            params = {}
-
-            # ================= HYPERPARAMETERS =================
-
-            if model_name == "Logistic Regression":
-                if use_custom:
-                    params["C"] = st.slider("Regularization Strength (C)", 0.01, 10.0, 1.0)
-                    params["max_iter"] = st.slider("Max Iterations", 100, 5000, 1000)
-                else:
-                    params["C"] = 1.0
-                    params["max_iter"] = 1000
-
-            elif model_name == "KNN":
-                if use_custom:
-                    params["n_neighbors"] = st.slider("Number of Neighbors (K)", 1, 20, 5)
-                else:
-                    params["n_neighbors"] = 5
-
-            elif model_name == "KNN Regressor":
-                if use_custom:
-                    params["n_neighbors"] = st.slider("Number of Neighbors (K)", 1, 20, 5)
-                else:
-                    params["n_neighbors"] = 5
-
-            elif model_name == "SVM":
-                if use_custom:
-                    params["C"] = st.slider("Regularization (C)", 0.1, 10.0, 1.0)
-                    params["kernel"] = st.selectbox("Kernel", ["linear", "rbf", "poly"])
-                else:
-                    params["C"] = 1.0
-                    params["kernel"] = "rbf"
-
-            elif model_name == "SVR":
-                if use_custom:
-                    params["C"] = st.slider("Regularization (C)", 0.1, 10.0, 1.0)
-                    params["kernel"] = st.selectbox("Kernel", ["linear", "rbf", "poly"])
-                else:
-                    params["C"] = 1.0
-                    params["kernel"] = "rbf" 
-
-            elif model_name == "Random Forest":
-                if use_custom:
-                    params["n_estimators"] = st.slider("Number of Trees", 10, 500, 100)
-                    params["max_depth"] = st.slider("Max Depth", 1, 50, 10)
-                    params["min_samples_split"] = st.slider("Min Samples Split", 2, 20, 2)
-                    params["min_samples_leaf"] = st.slider("Min Samples Leaf", 1, 20, 1)
-                else:
-                    params["n_estimators"] = 100
-                    params["max_depth"] = None
-                    params["min_samples_split"] = 2
-                    params["min_samples_leaf"] = 1
-
-            elif model_name == "Decision Tree Regressor":
-                if use_custom:
-                    params["max_depth"] = st.slider("Max Depth", 1, 50, 5)
-                    params["min_samples_split"] = st.slider("Min Samples Split", 2, 20, 2)
-                    params["min_samples_leaf"] = st.slider("Min Samples Leaf", 1, 20, 1)
-                else:
-                    params["max_depth"] = None
-                    params["min_samples_split"] = 2
-                    params["min_samples_leaf"] = 1
-
-            elif model_name == "Decision Tree":
-                if use_custom:
-                    params["max_depth"] = st.slider("Max Depth", 1, 50, 5)
-                    params["min_samples_split"] = st.slider("Min Samples Split", 2, 20, 2)
-                    params["min_samples_leaf"] = st.slider("Min Samples Leaf", 1, 20, 1)
-                else:
-                    params["max_depth"] = None
-                    params["min_samples_split"] = 2
-                    params["min_samples_leaf"] = 1
-
-            elif model_name == "Random Forest Regressor":
-                if use_custom:
-                    params["n_estimators"] = st.slider("Number of Trees", 10, 500, 100)
-                    params["max_depth"] = st.slider("Max Depth", 1, 50, 10)
-                    params["min_samples_split"] = st.slider("Min Samples Split", 2, 20, 2)
-                    params["min_samples_leaf"] = st.slider("Min Samples Leaf", 1, 20, 1)
-                else:
-                    params["n_estimators"] = 100
-                    params["max_depth"] = None
-                    params["min_samples_split"] = 2
-                    params["min_samples_leaf"] = 1
-
-            # ================= TRAIN BUTTON =================
-
-            # 🔥 AUTO SAMPLING (PLACE HERE)
-            max_rows = 20000
-            if len(X) > max_rows:
-                st.warning(f"Large dataset detected ({len(X)} rows).")
-                sample_size = min(max_rows, len(X))
-
-                sample_indices = X.sample(sample_size, random_state=42).index
-                X = X.loc[sample_indices]
-                y = y.loc[sample_indices]
-                st.info(f"Training will use {sample_size} sampled rows.")
-
-            # 🔥 HIGH FEATURE CHECK
-            max_features = 1000
-            if X.shape[1] > max_features:
-                st.warning(f"High dimensional dataset detected ({X.shape[1]} features).")
-                st.info("Models may be slow or overfit. Consider reducing features.")
-
-            train_clicked = st.button("🚀 Train Model", disabled=not dataset_valid)
-            if train_clicked:
-
-                if X.isnull().sum().sum() > 0:
-                    st.error("❌ Dataset contains missing values.")
-                    st.stop()
-
-                if not all(X.dtypes.apply(lambda x: x.kind in "iufcb")):
-                    st.error("❌ Dataset contains non-numeric columns.")
-                    st.stop()
-
-                try:
-                    # 🔴 Safe Train-Test Split
-                    if problem_type == "Classification":
-                        class_counts = y.value_counts()
-
-                        if class_counts.min() < 2:
-                            st.error("❌ Each class must have at least 2 samples for train-test split.")
-                            st.stop()
-
-                        X_train, X_test, y_train, y_test = train_test_split(
-                            X,
-                            y,
-                            test_size=0.2,
-                            random_state=42,
-                            stratify=y
-                        )
+                    if x_col not in numeric_cols:
+                        st.error("Histogram requires a numeric column")
                     else:
-                        X_train, X_test, y_train, y_test = train_test_split(
-                            X,
-                            y,
-                            test_size=0.2,
-                            random_state=42
-                        )
-                    # 🔴 Post-Split Class Check
-                    if problem_type == "Classification" and y_train.nunique() < 2:
-                        st.error("❌ Training data contains only one class after split.")
-                        st.stop()
+                        with st.spinner("Generating chart... Please wait ⏳"):
+                            fig, ax = plt.subplots()
+                            sns.histplot(df[x_col].dropna(), bins=20, ax=ax)
+                            st.pyplot(fig)
+                            download_chart(fig, "histogram_download")
+                            plt.close(fig)
 
-                    if model_name in ["Logistic Regression", "KNN", "KNN Regressor", "Linear Regression", "SVM", "SVR"]:
-                        scaler = StandardScaler()
-                        X_train = scaler.fit_transform(X_train)
-                        X_test = scaler.transform(X_test)
-                    
-                    # Model creation
-                    if model_name == "Logistic Regression":
-                        model = LogisticRegression(random_state=42,**params)
+                elif chart_type == "Box Plot":
 
-                    elif model_name == "KNN":
-                        if params["n_neighbors"] > len(X_train):
-                            params["n_neighbors"] = len(X_train)
-                            st.warning(f"K automatically adjusted to {len(X_train)}")
-                        model = KNeighborsClassifier(**params)
+                    if x_col not in numeric_cols:
+                        st.error("Box Plot requires a numeric column")
+                    else:
+                        with st.spinner("Generating chart... Please wait ⏳"):
+                            fig, ax = plt.subplots()
+                            sns.boxplot(x=df[x_col].dropna(), ax=ax)
+                            st.pyplot(fig)
+                            download_chart(fig, "box_download")
+                            plt.close(fig)
 
-                    elif model_name == "KNN Regressor":
-                        if params["n_neighbors"] > len(X_train):
-                            params["n_neighbors"] = len(X_train)
-                            st.warning(f"K automatically adjusted to {len(X_train)}")
-                        model = KNeighborsRegressor(**params)
-
-                    elif model_name == "Random Forest":
-                        model = RandomForestClassifier(
-                            random_state=42,
-                            n_jobs=-1,
-                            **params
-                        )
-
-                    elif model_name == "Linear Regression":
-                        model = LinearRegression()
-
-                    elif model_name == "Decision Tree Regressor":
-                        model = DecisionTreeRegressor(**params)
-
-                    elif model_name == "Decision Tree":
-                        model = DecisionTreeClassifier(**params)
-
-                    elif model_name == "Random Forest Regressor":
-                        model = RandomForestRegressor(
-                            random_state=42,
-                            n_jobs=-1,
-                            **params
-                        )
-
-                    elif model_name == "SVM":
-                        model = SVC(**params)
-
-                    elif model_name == "SVR":
-                        model = SVR(**params)   
-
-                    # Training
-                    with st.spinner("⏳ Please wait... Model is training..."):
-                        model.fit(X_train, y_train)
-                        y_pred = model.predict(X_test)
-
-                    st.success("✅ Model Trained Successfully!")
-                    st.subheader("📊 Model Results")
-
-                    # ================= CLASSIFICATION =================
-
-                    if problem_type == "Classification":
-
-                        acc = accuracy_score(y_test, y_pred)
-                        st.metric("Accuracy", round(acc, 4))
-
-                        cm = confusion_matrix(y_test, y_pred)
+                elif chart_type == "Bar Chart":
+                    with st.spinner("Generating chart... Please wait ⏳"):
+                        counts = df[x_col].value_counts().head(10)
 
                         fig, ax = plt.subplots()
-                        sns.heatmap(
-                            cm,
-                            annot=True,
-                            fmt="d",
-                            cmap="viridis",
-                            xticklabels=model.classes_,
-                            yticklabels=model.classes_,
-                            ax=ax
-                        )
-                        ax.set_xlabel("Predicted")
-                        ax.set_ylabel("Actual")
+                        ax.bar(counts.index.astype(str), counts.values)
+                        plt.xticks(rotation=45)
                         st.pyplot(fig)
+                        download_chart(fig, "bar_download")
+                        plt.close(fig)
 
-                        report = classification_report(y_test, y_pred, output_dict=True)
-                        report_df = pd.DataFrame(report).transpose()
-                        st.dataframe(report_df.style.format("{:.2f}"))
 
-                    # ================= REGRESSION =================
+                elif chart_type == "Scatter Plot":
+                    if x_col not in numeric_cols or y_col not in numeric_cols:
+                        st.error("Scatter Plot requires numeric columns")
 
                     else:
+                        scatter_df = df[[x_col, y_col]].dropna()
+                        if scatter_df.empty:
+                            st.warning("No valid data available after removing missing values.")
 
-                        r2 = r2_score(y_test, y_pred)
-                        mse = mean_squared_error(y_test, y_pred)
-                        mae = mean_absolute_error(y_test, y_pred)
-                        rmse = np.sqrt(mse)
+                        else:
+                            with st.spinner("Generating chart... Please wait ⏳"):
+                                fig, ax = plt.subplots()
+                                sns.scatterplot(
+                                    x=scatter_df[x_col],
+                                    y=scatter_df[y_col],
+                                    ax=ax
+                                )
+                                st.pyplot(fig)
+                                download_chart(fig, "scatter_download")
+                                plt.close(fig)
 
-                        col1, col2, col3, col4 = st.columns(4)
-                        col1.metric("R2 Score", round(r2, 4))
-                        col2.metric("MSE", round(mse, 4))
-                        col3.metric("RMSE", round(rmse, 4))
-                        col4.metric("MAE", round(mae, 4))
 
-                except Exception as e:
-                    st.error("❌ Model Training Failed!")
-                    with st.expander("🔍 See Technical Error"):
-                        st.code(str(e))
-                
-            if not dataset_valid:
-                st.info("Fix the above issues to enable model training.")
+                elif chart_type == "Line Chart":
+
+                    if x_col not in numeric_cols or y_col not in numeric_cols:
+                        st.error("Line Chart requires numeric columns")
+                    else:
+                        with st.spinner("Generating chart... Please wait ⏳"):
+                            fig, ax = plt.subplots()
+                            line_df = df[[x_col, y_col]].dropna()
+                            sns.lineplot(x=line_df[x_col], y=line_df[y_col], ax=ax)
+                            st.pyplot(fig)
+                            download_chart(fig, "line_download")
+                            plt.close(fig)
+
+                elif chart_type == "Violin Plot":
+
+                    if x_col not in numeric_cols:
+                        st.error("Violin Plot requires a numeric column")
+                    else:
+                        with st.spinner("Generating chart... Please wait ⏳"):
+                            fig, ax = plt.subplots()
+                            sns.violinplot(x=df[x_col].dropna(), ax=ax)
+                            st.pyplot(fig)
+                            download_chart(fig, "violin_download")
+                            plt.close(fig)
+
+                elif chart_type == "Pie Chart":
+                    with st.spinner("Generating chart... Please wait ⏳"):
+                        counts = df[x_col].value_counts().head(6)
+                        fig, ax = plt.subplots()
+                        ax.pie(counts.values, labels=counts.index.astype(str), autopct='%1.1f%%')
+                        ax.axis("equal")
+
+                        fig.tight_layout()
+                        st.pyplot(fig)        # Chart display
+                        download_chart(fig, "pie_download")
+                        plt.close(fig)
+
+            except Exception as e:
+                st.error(f"Error generating chart: {e}")
+
+    with eda_tab5:
+        st.subheader("Handle Missing Values")
+
+        st.write("Columns with Missing Values")
+
+        missing_summary = df.isnull().sum()
+        if missing_summary.sum() == 0:
+            st.success("No missing values found in dataset")
+        else:
+            st.dataframe(missing_summary[missing_summary > 0])
+
+        missing_cols = df.columns[df.isnull().any()]
+        if len(missing_cols) == 0:
+            st.success("No columns with missing values")
+        else:
+            column = st.selectbox("Select Column", missing_cols)
+
+        missing_count = df[column].isnull().sum()
+
+        st.write(f"Missing values in column: {missing_count}")
+
+        method = st.selectbox(
+            "Fill Method",
+            ["Mean", "Median", "Mode"]
+        )
+
+        missing_count = df[column].isnull().sum()
+
+        st.write(f"Missing values in column: {missing_count}")
+
+        # Buttons in same row
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("Fill Missing Values", disabled=(missing_count == 0)):
+                if method == "Mean":
+
+                    if np.issubdtype(df[column].dtype, np.number):
+                        mean_val = round(df[column].mean(),2)
+                        st.session_state.df[column] = df[column].fillna(mean_val)
+                        st.success("Missing values filled with Mean")
+
+                    else:
+                        st.error("Mean can only be used for numeric columns")
+
+                elif method == "Median":
+                    if np.issubdtype(df[column].dtype, np.number):
+                        st.session_state.df[column] = df[column].fillna(df[column].median())
+                        st.success("Missing values filled with Median")
+                    else:
+                        st.error("Median can only be used for numeric columns")
+
+                elif method == "Mode":
+                    mode_val = df[column].mode()
+
+                    if not mode_val.empty:
+                        st.session_state.df[column] = df[column].fillna(mode_val[0])
+                        st.success("Missing values filled with Mode")
+
+
+        with col2:
+            # Check if dataframe has missing values
+            has_missing = st.session_state.df.isnull().sum().sum() > 0
+
+            if st.button("Reset Dataset"):
+                st.session_state.df = st.session_state.original_df.copy()
+                st.success("Dataset reset to original")
+
+        # ---------- DOWNLOAD ----------
+        st.subheader("Download Cleaned Dataset")
+
+        csv = st.session_state.df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "Download Cleaned CSV",
+            data=csv,
+            file_name="cleaned_dataset.csv",
+            mime="text/csv"
+        )
+
+
+    with eda_tab6:
+        st.subheader("Duplicate Rows Checker")
+
+        df = st.session_state.df
+
+        # Count duplicate rows
+        duplicate_count = df.duplicated().sum()
+
+        st.write(f"Total Duplicate Rows: {duplicate_count}")
+
+        # Preview duplicates
+        if duplicate_count > 0:
+            duplicates = df[df.duplicated()]
+            st.write("Duplicate Rows Preview")
+            st.dataframe(duplicates)
+
+        col1, col2, col3 = st.columns(3)
+
+        # Delete duplicates
+        with col1:
+            if st.button("Delete All Duplicates", disabled=duplicate_count == 0, key="delete_dup"):
+                st.session_state.df = df.drop_duplicates()
+                st.success("All duplicate rows removed")
+                st.rerun()
+
+        # Reset dataset
+        with col2:
+            if st.button("Reset Dataset", key="reset_dup"):
+                st.session_state.df = st.session_state.original_df.copy()
+                st.success("Dataset reset to original")
+                st.rerun()
+
+        # Download dataset
+        with col3:
+            csv = st.session_state.df.to_csv(index=False).encode("utf-8")
+
+            st.download_button(
+                label="Download Dataset",
+                data=csv,
+                file_name="cleaned_dataset.csv",
+                mime="text/csv",
+                key="download_dup"
+            )         
 else:
     st.info("Upload a CSV file to begin.")
