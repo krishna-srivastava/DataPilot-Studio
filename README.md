@@ -48,6 +48,9 @@ Run the application:
 streamlit run app.py
 ```
 
+## App Preview:
+![DataPilot Studio Screenshot](app_screenshot.png)
+
 ## How It Works:
 1. Upload your dataset in CSV format.
 2. Explore dataset overview and column statistics.
