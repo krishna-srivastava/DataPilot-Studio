@@ -150,10 +150,7 @@ if file is not None:
             colE, colF = st.columns(2)
 
             # 🔥 FIX (important)
-            if isinstance(most_frequent, (int, float)):
-                colE.metric("Most Frequent Value", most_frequent)
-            else:
-                colE.write(f"Most Frequent Value: {most_frequent}")
+            colE.metric("Most Frequent Value", str(most_frequent))
 
             colF.metric("Top Value Count", int(top_count))
 
