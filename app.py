@@ -21,6 +21,12 @@ def download_chart(fig, key):
 @st.cache_data
 def load_data(file):
     df = pd.read_csv(file, engine="pyarrow")
+
+    # 🔥 Safe conversion (only object columns)
+    for col in df.select_dtypes(include=["object"]).columns:
+        df[col] = df[col].apply(
+            lambda x: x.decode("utf-8", errors="ignore") if isinstance(x, bytes) else x
+        )
     return df
 
 # ================= PAGE CONFIG =================
@@ -47,6 +53,11 @@ if file is not None:
         st.session_state.file_name = file.name
         st.session_state.original_df = load_data(file)
         st.session_state.df = st.session_state.original_df.copy()
+
+    # 🔥 FIX: check before use
+    if "df" not in st.session_state:
+        st.warning("Data not initialized properly. Please re-upload file.")
+        st.stop()
 
     df = st.session_state.df
 
@@ -128,7 +139,6 @@ if file is not None:
             colJ.metric("Skewness", round(skew_val, 2))
 
         else:
-
             mode_val = df[column].mode()
             if not mode_val.empty:
                 most_frequent = mode_val[0]
@@ -138,12 +148,14 @@ if file is not None:
                 top_count = 0
 
             colE, colF = st.columns(2)
-            colE.metric("Most Frequent Value", most_frequent)
-            colF.metric("Top Value Count", int(top_count))
 
-            top_values = df[column].value_counts().head(10)
-            st.subheader("Top 10 Values")
-            st.dataframe(top_values)
+            # 🔥 FIX (important)
+            if isinstance(most_frequent, (int, float)):
+                colE.metric("Most Frequent Value", most_frequent)
+            else:
+                colE.write(f"Most Frequent Value: {most_frequent}")
+
+            colF.metric("Top Value Count", int(top_count))
 
         # ---------- CORRELATION ----------
     with eda_tab3:
