@@ -335,7 +335,7 @@ if file is not None:
         col1, col2 = st.columns(2)
 
         with col1:
-            if st.button("Fill Missing Values", disabled=(missing_count == 0)):
+            if st.button("Fill Missing Values", disabled=bool(missing_count == 0)):
                 if method == "Mean":
 
                     if np.issubdtype(df[column].dtype, np.number):
@@ -401,7 +401,7 @@ if file is not None:
 
         # Delete duplicates
         with col1:
-            if st.button("Delete All Duplicates", disabled=duplicate_count == 0, key="delete_dup"):
+            if st.button("Delete All Duplicates", disabled=bool(duplicate_count == 0), key="delete_dup"):
                 st.session_state.df = df.drop_duplicates()
                 st.success("All duplicate rows removed")
                 st.rerun()
