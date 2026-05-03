@@ -411,12 +411,12 @@ if file is not None:
  
         # ── CATEGORICAL ──
         else:
-            vc = df[column].value_counts()  
+            vc = df[column].value_counts()  # ek baar calculate
  
             mode_val = df[column].mode()
             if not mode_val.empty:
                 most_frequent = mode_val[0]
-                top_count     = vc.iloc[0]   
+                top_count     = vc.iloc[0]   # ✅ dobara call nahi
             else:
                 most_frequent = "N/A"
                 top_count     = 0
@@ -582,7 +582,6 @@ if file is not None:
  
         show_chart = st.button("Show Chart", key="show_chart_btn")
  
-        # helper — dark theme axes
         def style_ax(fig, ax):
             fig.patch.set_facecolor("#0d1117")
             ax.set_facecolor("#0d1117")
@@ -751,7 +750,6 @@ if file is not None:
     with eda_tab5:
         st.subheader("Handle Missing Values")
         df = st.session_state.df
-        
         if len(df) > 50000:
             st.info(f"⚡ Large dataset ({len(df):,} rows) — operations may take a moment.")
 
