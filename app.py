@@ -293,73 +293,208 @@ if file is not None:
         with col1:
             st.subheader("Column Names:")
             st.write(df.columns.tolist())
-
         with col2:
             st.subheader("Data Types:")
             st.write(df.dtypes)
 
+        # ── Statistical Summary ──
         st.subheader("Statistical Summary")
-        num_df = df.select_dtypes(include=np.number)
-        cat_df = df.select_dtypes(include="object")
+        numeric_cols = df.select_dtypes(include=['number']).columns
+        object_cols  = df.select_dtypes(include=['object', 'category']).columns
+        bool_cols    = df.select_dtypes(include=['bool']).columns
 
-        if not num_df.empty:
-            st.write(num_df.describe().round(2))
-        if not cat_df.empty:
-            st.write(cat_df.describe())
+        if len(numeric_cols) > 0:
+            st.write("**Numerical Columns**")
+            st.dataframe(df[numeric_cols].describe().round(2), use_container_width=True)
+        if len(object_cols) > 0:
+            st.write("**Categorical Columns**")
+            st.dataframe(df[object_cols].describe(), use_container_width=True)
+        if len(bool_cols) > 0:
+            st.write("**Boolean Columns**")
+            st.dataframe(df[bool_cols].describe(), use_container_width=True)
 
+        # ── Missing Values ──
         st.subheader("Missing Values")
-        missing = df.isnull().sum()
+        missing         = df.isnull().sum()
         missing_percent = (missing / len(df)) * 100
-
-        missing_df = pd.DataFrame({
+        missing_df      = pd.DataFrame({
             "Missing Values": missing,
             "Percentage (%)": missing_percent.round(2)
         })
+        missing_filtered = missing_df[missing_df["Missing Values"] > 0]
+        if missing_filtered.empty:
+            st.success("No missing values found 🎉")
+        else:
+            st.dataframe(missing_filtered, use_container_width=True)
 
-        st.dataframe(missing_df[missing_df["Missing Values"] > 0], use_container_width=True)
+        # ── DATA HEALTH SCORE ──
+        st.subheader("Data Health Score")
+
+        total_cells    = df.shape[0] * df.shape[1]
+        missing_pct    = (df.isnull().sum().sum() / total_cells) * 100
+        dup_pct        = (df.duplicated().sum() / len(df)) * 100
+
+        outlier_counts = []
+        for col in numeric_cols:
+            q1, q3 = df[col].quantile(0.25), df[col].quantile(0.75)
+            iqr    = q3 - q1
+            out    = ((df[col] < q1 - 1.5 * iqr) | (df[col] > q3 + 1.5 * iqr)).sum()
+            outlier_counts.append(out)
+        outlier_total = sum(outlier_counts)
+        outlier_pct   = (outlier_total / len(df)) * 100 if len(df) > 0 else 0
+
+        # Score calculation (100 mein se)
+        missing_score = max(0, 100 - missing_pct * 2)
+        dup_score     = max(0, 100 - dup_pct * 3)
+        outlier_score = max(0, 100 - outlier_pct * 1.5)
+        health_score  = round((missing_score * 0.4 + dup_score * 0.3 + outlier_score * 0.3), 1)
+
+        if health_score >= 80:
+            score_color = "#3fb950"
+            score_label = "Excellent"
+        elif health_score >= 60:
+            score_color = "#d29922"
+            score_label = "Fair"
+        else:
+            score_color = "#f85149"
+            score_label = "Poor"
+
+        st.markdown(f"""
+        <div style="background:#0d1117; border:1px solid #21262d; border-radius:10px; padding:1.2rem; margin-bottom:1rem;">
+            <div style="font-family:'Space Mono',monospace; font-size:0.65rem; color:#3d444d; text-transform:uppercase; letter-spacing:0.15em; margin-bottom:0.5rem;">Overall Health Score</div>
+            <div style="font-size:2.8rem; font-weight:800; color:{score_color}; line-height:1;">{health_score}<span style="font-size:1rem; color:#3d444d;">/100</span></div>
+            <div style="font-family:'Space Mono',monospace; font-size:0.7rem; color:{score_color}; margin-top:0.3rem;">{score_label}</div>
+            <div style="margin-top:0.8rem; background:#161b22; border-radius:6px; height:6px; overflow:hidden;">
+                <div style="width:{health_score}%; height:100%; background:{score_color}; border-radius:6px;"></div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        sc1, sc2, sc3 = st.columns(3)
+        sc1.metric("Missing Score",  f"{round(missing_score, 1)}/100", f"{missing_pct:.1f}% missing")
+        sc2.metric("Duplicate Score", f"{round(dup_score, 1)}/100",   f"{dup_pct:.1f}% duplicates")
+        sc3.metric("Outlier Score",  f"{round(outlier_score, 1)}/100", f"{outlier_pct:.1f}% outliers")
+
+        # ── OUTLIER DETECTION ──
+        st.subheader("Outlier Detection (IQR Method)")
+
+        if len(numeric_cols) == 0:
+            st.info("No numeric columns found for outlier detection.")
+        else:
+            outlier_rows = []
+            for col in numeric_cols:
+                q1, q3 = df[col].quantile(0.25), df[col].quantile(0.75)
+                iqr    = q3 - q1
+                lower  = q1 - 1.5 * iqr
+                upper  = q3 + 1.5 * iqr
+                count  = int(((df[col] < lower) | (df[col] > upper)).sum())
+                pct    = round((count / len(df)) * 100, 2)
+                outlier_rows.append({
+                    "Column"         : col,
+                    "Lower Bound"    : round(lower, 3),
+                    "Upper Bound"    : round(upper, 3),
+                    "Outlier Count"  : count,
+                    "Outlier %"      : pct
+                })
+
+            outlier_df = pd.DataFrame(outlier_rows).sort_values("Outlier Count", ascending=False)
+            st.dataframe(outlier_df, use_container_width=True)
 
 
 # ---------- COLUMN ANALYZER ----------
     with eda_tab2:
         column = st.selectbox("Select Column", df.columns, key="col_analyzer")
- 
+
         missing_count   = df[column].isnull().sum()
         missing_percent = (missing_count / len(df)) * 100
         unique_values   = df[column].nunique()
- 
+
         colA, colB, colC, colD = st.columns(4)
         colA.metric("Data Type",      str(df[column].dtype))
         colB.metric("Missing Values", int(missing_count))
         colC.metric("Missing %",      f"{missing_percent:.2f}%")
         colD.metric("Unique Values",  int(unique_values))
- 
+
         # ── NUMERIC ──
         if np.issubdtype(df[column].dtype, np.number):
- 
+
             mean_val   = df[column].mean()
             median_val = df[column].median()
             std_val    = df[column].std()
             min_val    = df[column].min()
             max_val    = df[column].max()
             skew_val   = df[column].skew()
- 
+            kurt_val   = df[column].kurt()
+
             colE, colF, colG = st.columns(3)
             colE.metric("Mean",     round(mean_val, 2))
             colF.metric("Median",   round(median_val, 2))
             colG.metric("Std Dev",  round(std_val, 2))
- 
+
             colH, colI, colJ = st.columns(3)
             colH.metric("Min",      round(min_val, 2))
             colI.metric("Max",      round(max_val, 2))
             colJ.metric("Skewness", round(skew_val, 2))
- 
+
+            # ── Skewness & Kurtosis Interpretation ──
+            st.markdown("#### Distribution Interpretation")
+
+            if skew_val > 1:
+                skew_label = "Highly Right Skewed"
+                skew_color = "#f85149"
+            elif skew_val > 0.5:
+                skew_label = "Moderately Right Skewed"
+                skew_color = "#d29922"
+            elif skew_val < -1:
+                skew_label = "Highly Left Skewed"
+                skew_color = "#f85149"
+            elif skew_val < -0.5:
+                skew_label = "Moderately Left Skewed"
+                skew_color = "#d29922"
+            else:
+                skew_label = "Approximately Symmetric"
+                skew_color = "#3fb950"
+
+            if kurt_val > 3:
+                kurt_label = "Leptokurtic — heavy tails, sharp peak (outliers likely)"
+                kurt_color = "#f85149"
+            elif kurt_val < -1:
+                kurt_label = "Platykurtic — light tails, flat distribution"
+                kurt_color = "#d29922"
+            else:
+                kurt_label = "Mesokurtic — normal-like tails"
+                kurt_color = "#3fb950"
+
+            interp_l, interp_r = st.columns(2)
+            interp_l.markdown(f"""
+            <div style="background:#0d1117; border:1px solid #21262d; border-left:3px solid {skew_color};
+                        border-radius:8px; padding:0.8rem 1rem;">
+                <div style="font-family:'Space Mono',monospace; font-size:0.6rem; color:#3d444d;
+                            text-transform:uppercase; letter-spacing:0.15em; margin-bottom:0.4rem;">
+                    Skewness · {round(skew_val, 3)}
+                </div>
+                <div style="font-size:0.78rem; color:{skew_color};">{skew_label}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            interp_r.markdown(f"""
+            <div style="background:#0d1117; border:1px solid #21262d; border-left:3px solid {kurt_color};
+                        border-radius:8px; padding:0.8rem 1rem;">
+                <div style="font-family:'Space Mono',monospace; font-size:0.6rem; color:#3d444d;
+                            text-transform:uppercase; letter-spacing:0.15em; margin-bottom:0.4rem;">
+                    Kurtosis · {round(kurt_val, 3)}
+                </div>
+                <div style="font-size:0.78rem; color:{kurt_color};">{kurt_label}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
             # sample for performance
             clean = df[column].dropna()
             if len(clean) > 5000:
                 clean = clean.sample(5000, random_state=42)
- 
+
             chart_l, chart_r = st.columns(2)
- 
+
             # Histogram + KDE
             with chart_l:
                 st.markdown("##### Distribution")
@@ -385,7 +520,7 @@ if file is not None:
                 st.pyplot(fig)
                 download_chart(fig, key="hist_download")
                 plt.close()
- 
+
             # Box plot
             with chart_r:
                 st.markdown("##### Box Plot")
@@ -408,29 +543,63 @@ if file is not None:
                 st.pyplot(fig)
                 download_chart(fig, key="box_download")
                 plt.close()
- 
+
+            # ── OUTLIER ROWS PREVIEW ──
+            st.markdown("#### Outlier Rows Preview (IQR Method)")
+
+            q1, q3 = df[column].quantile(0.25), df[column].quantile(0.75)
+            iqr    = q3 - q1
+            lower  = q1 - 1.5 * iqr
+            upper  = q3 + 1.5 * iqr
+
+            outlier_mask = (df[column] < lower) | (df[column] > upper)
+            outlier_rows = df[outlier_mask]
+
+            oc1, oc2, oc3 = st.columns(3)
+            oc1.metric("Lower Bound", round(lower, 3))
+            oc2.metric("Upper Bound", round(upper, 3))
+            oc3.metric("Outlier Rows", len(outlier_rows))
+
+            if outlier_rows.empty:
+                st.success("No outliers found in this column 🎉")
+            else:
+                with st.expander(f"Preview {min(50, len(outlier_rows))} Outlier Rows"):
+                    st.dataframe(outlier_rows.head(50), use_container_width=True)
+                    if len(outlier_rows) > 50:
+                        st.caption(f"Showing 50 of {len(outlier_rows)} outlier rows.")
+
         # ── CATEGORICAL ──
         else:
-            vc = df[column].value_counts()  # ek baar calculate
- 
+            vc = df[column].value_counts()
+
             mode_val = df[column].mode()
             if not mode_val.empty:
                 most_frequent = mode_val[0]
-                top_count     = vc.iloc[0]   # ✅ dobara call nahi
+                top_count     = vc.iloc[0]
             else:
                 most_frequent = "N/A"
                 top_count     = 0
- 
+
             colE, colF = st.columns(2)
             colE.metric("Most Frequent Value", str(most_frequent))
             colF.metric("Top Value Count",     int(top_count))
- 
+
+            # ── Value Distribution % Table ──
+            st.markdown("#### Value Distribution")
+            vc_table = pd.DataFrame({
+                "Value"      : vc.index,
+                "Count"      : vc.values,
+                "Percentage" : (vc.values / len(df) * 100).round(2)
+            })
+            vc_table["Percentage"] = vc_table["Percentage"].astype(str) + " %"
+            st.dataframe(vc_table, use_container_width=True)
+
             MAX_BARS  = 20
             vc_plot   = vc.head(MAX_BARS)
             truncated = len(vc) > MAX_BARS
- 
+
             chart_l, chart_r = st.columns(2)
- 
+
             # Bar chart
             with chart_l:
                 title = f"##### Top {MAX_BARS} Values" if truncated else "##### Value Counts"
@@ -450,22 +619,22 @@ if file is not None:
                 st.pyplot(fig)
                 download_chart(fig, key="bar_download")
                 plt.close()
- 
+
             # Pie chart
             with chart_r:
                 if len(vc) <= 10:
                     st.markdown("##### Distribution")
-                    pie_data   = vc
+                    pie_data = vc
                 else:
                     st.markdown("##### Top 10 Share")
-                    top10      = vc.head(10)
-                    other      = vc.iloc[10:].sum()
-                    pie_data   = pd.concat([top10, pd.Series({"Other": other})])
- 
+                    top10    = vc.head(10)
+                    other    = vc.iloc[10:].sum()
+                    pie_data = pd.concat([top10, pd.Series({"Other": other})])
+
                 pie_colors = ["#388bfd","#58a6ff","#3fb950","#d29922",
                               "#f78166","#bc8cff","#79c0ff","#56d364",
                               "#e3b341","#ff7b72","#8b949e"]
- 
+
                 fig, ax = plt.subplots(figsize=(4, 4))
                 fig.patch.set_facecolor("#0d1117")
                 wedges, texts, autotexts = ax.pie(
@@ -748,102 +917,103 @@ if file is not None:
 
 # ---------- Missing Values ----------
     with eda_tab5:
-        st.subheader("Handle Missing Values")
+        st.subheader("Missing Values Table")
+
         df = st.session_state.df
-        if len(df) > 50000:
-            st.info(f"⚡ Large dataset ({len(df):,} rows) — operations may take a moment.")
 
-        # -------- Missing Summary --------
-        missing_summary = df.isnull().sum()
-        missing_summary = missing_summary[missing_summary > 0]
+        # -------- Missing calculation --------
+        missing = df.isnull().sum()
+        missing = missing[missing > 0]
 
-        if missing_summary.sum() == 0:
-            st.success("No missing values found in dataset 🎉")
+        if missing.empty:
+            st.success("No missing values in dataset 🎉")
         else:
-            st.dataframe(missing_summary, use_container_width=True)
-            # -------- Fill Section --------
+            missing_df = pd.DataFrame({
+                "Column": missing.index,
+                "Missing Values": missing.values
+            }).sort_values(by="Missing Values", ascending=False)
+
+            st.caption("Only columns with missing values are shown below")
+            st.dataframe(missing_df, use_container_width=True)
+
+            # -------- Fill section --------
             st.markdown("### Fill Missing Values")
             col1, col2 = st.columns(2)
 
             with col1:
-                column = st.selectbox(
+                selected_col = st.selectbox(
                     "Select Column",
-                    missing_summary.index.tolist(),
-                    key="miss_col"
+                    missing_df["Column"].tolist(),
+                    key="col_select"
                 )
             with col2:
                 method = st.selectbox(
-                    "Fill Method",
+                    "Select Method",
                     ["Mean", "Median", "Mode"],
-                    key="miss_method"
+                    key="method_select"
                 )
 
-            missing_count = int(df[column].isnull().sum())
-            st.caption(f"Missing values in '{column}': {missing_count}")
-
-            # -------- Warnings --------
-            if method in ["Mean", "Median"] and not np.issubdtype(df[column].dtype, np.number):
-                st.error(f"❌ '{column}' is not numeric. Use Mode instead.")
-                fill_blocked = True
-            else:
-                fill_blocked = False
-
-            # -------- Fill Button --------
-            if st.button("Fill Missing Values", key="fill_btn", disabled=fill_blocked):
-                if method == "Mean":
-                    val = round(df[column].mean(), 2)
-                elif method == "Median":
-                    val = df[column].median()
+            # -------- Fill button --------
+            if st.button("Fill Missing", key="fill_btn"):
+                if method in ["Mean", "Median"] and not np.issubdtype(df[selected_col].dtype, np.number):
+                    st.error("Mean/Median can only be applied to numeric columns ❌")
                 else:
-                    mode_val = df[column].mode()
-                    val = mode_val[0] if not mode_val.empty else None
+                    if method == "Mean":
+                        value = df[selected_col].mean()
+                    elif method == "Median":
+                        value = df[selected_col].median()
+                    else:
+                        mode_val = df[selected_col].mode()
+                        value = mode_val[0] if not mode_val.empty else None
 
-                if val is None:
-                    st.warning("No valid value found ❌")
-                else:
-                    temp_df = st.session_state.df.copy()
-                    temp_df[column] = temp_df[column].fillna(val)
-                    st.session_state.df = temp_df
-                    st.session_state["miss_msg"] = f"'{column}' filled using {method} ({val})"
-                    st.rerun()
+                    if value is None:
+                        st.warning("No valid value found to fill ❌")
+                    else:
+                        df[selected_col] = df[selected_col].fillna(value)
+                        st.session_state.df = df
+                        st.session_state["last_action"] = f"'{selected_col}' filled using {method}"
+                        st.rerun()
 
-        # -------- Message --------
-        if "miss_msg" in st.session_state:
-            st.success(st.session_state["miss_msg"] + " ✅")
-            del st.session_state["miss_msg"]
+        # -------- Show success after rerun --------
+        if "last_action" in st.session_state:
+            st.success(st.session_state["last_action"] + " ✅")
+            del st.session_state["last_action"]
 
         # -------- Delete Column --------
         st.markdown("### Delete a Column")
-        df = st.session_state.df
+        df = st.session_state.df  
         col1, col2 = st.columns([3, 1])
-
+        
         with col1:
             del_col = st.selectbox(
                 "Select column to delete",
                 df.columns.tolist(),
-                key="del_col"
+                key="fill_del_col"
             )
         with col2:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("Delete Column", key="del_btn"):
-                temp_df = st.session_state.df.drop(columns=[del_col])
-                st.session_state.df = temp_df
-                st.session_state["miss_msg"] = f"'{del_col}' deleted ✅"
+            if st.button("Delete Column", key="fill_del_btn"):
+                if "df_history" not in st.session_state:
+                    st.session_state["df_history"] = []
+                st.session_state["df_history"].append(st.session_state.df.copy())
+                st.session_state.df = st.session_state.df.drop(columns=[del_col])
+                st.session_state["last_action"] = f"'{del_col}' column deleted"
                 st.rerun()
 
         # -------- Reset --------
-        if st.button("🔄 Reset to Original Dataset", key="miss_reset_btn"):
+        if st.button("🔄 Reset to Original Dataset", key="fill_reset_btn"):
             st.session_state.df = st.session_state.original_df.copy()
-            st.session_state["miss_msg"] = "Dataset reset to original"
+            st.session_state["df_history"] = []
+            st.session_state["last_action"] = "Dataset reset to original"
             st.rerun()
 
-        # -------- Download --------
+        # -------- Download cleaned data --------
         st.markdown("### Download Cleaned Dataset")
         csv = st.session_state.df.to_csv(index=False).encode("utf-8")
         st.download_button(
-            "Download Cleaned CSV",
+            label="Download CSV",
             data=csv,
-            file_name="cleaned_dataset.csv",
+            file_name="cleaned_data.csv",
             mime="text/csv"
         )
 
