@@ -975,44 +975,94 @@ if file is not None:
                     missing_df["Column"].tolist(),
                     key="col_select"
                 )
+
+            is_numeric = np.issubdtype(df[selected_col].dtype, np.number)
+            if is_numeric:
+                method_options = ["Mean", "Median", "Mode", "Custom Value"]
+            else:
+                method_options = ["Mode", "Custom Value"]
+
             with col2:
                 method = st.selectbox(
                     "Select Method",
-                    ["Mean", "Median", "Mode"],
+                    method_options,
                     key="method_select"
+                )
+
+            # ── Custom value input ──
+            custom_value = None
+            if method == "Custom Value":
+                custom_value = st.text_input(
+                    "Enter custom value to fill",
+                    placeholder='e.g. 0 or "Unknown"',
+                    key="custom_fill_val"
                 )
 
             # -------- Fill button --------
             if st.button("Fill Missing", key="fill_btn"):
-                if method in ["Mean", "Median"] and not np.issubdtype(df[selected_col].dtype, np.number):
-                    st.error("Mean/Median can only be applied to numeric columns ❌")
+                if method == "Mean":
+                    value = df[selected_col].mean()
+                elif method == "Median":
+                    value = df[selected_col].median()
+                elif method == "Mode":
+                    mode_val = df[selected_col].mode()
+                    value = mode_val[0] if not mode_val.empty else None
                 else:
-                    if method == "Mean":
-                        value = df[selected_col].mean()
-                    elif method == "Median":
-                        value = df[selected_col].median()
+                    if custom_value == "" or custom_value is None:
+                        st.warning("Please enter a custom value ❌")
+                        value = None
                     else:
-                        mode_val = df[selected_col].mode()
-                        value = mode_val[0] if not mode_val.empty else None
+                        if is_numeric:
+                            try:
+                                value = float(custom_value)
+                            except ValueError:
+                                st.error("Numeric column hai — number enter karo ❌")
+                                value = None
+                        else:
+                            value = custom_value
 
-                    if value is None:
-                        st.warning("No valid value found to fill ❌")
-                    else:
-                        df[selected_col] = df[selected_col].fillna(value)
-                        st.session_state.df = df
-                        st.session_state["last_action"] = f"'{selected_col}' filled using {method}"
-                        st.rerun()
+                if value is not None:
+                    if "df_history" not in st.session_state:
+                        st.session_state["df_history"] = []
+                    st.session_state["df_history"].append(st.session_state.df.copy())
+                    df[selected_col] = df[selected_col].fillna(value)
+                    st.session_state.df = df
+                    st.session_state["last_action"] = f"'{selected_col}' filled using {method}"
+                    st.rerun()
 
         # -------- Show success after rerun --------
         if "last_action" in st.session_state:
             st.success(st.session_state["last_action"] + " ✅")
             del st.session_state["last_action"]
 
+        # -------- Undo button --------
+        st.markdown("### Undo / Reset")
+        undo_col, reset_col = st.columns(2)
+
+        history = st.session_state.get("df_history", [])
+
+        with undo_col:
+            if st.button(
+                f"↩ Undo Last Action ({len(history)} steps)",
+                key="undo_btn",
+                disabled=len(history) == 0
+            ):
+                st.session_state.df = st.session_state["df_history"].pop()
+                st.session_state["last_action"] = "Last action undone"
+                st.rerun()
+
+        with reset_col:
+            if st.button("🔄 Reset to Original Dataset", key="fill_reset_btn"):
+                st.session_state.df = st.session_state.original_df.copy()
+                st.session_state["df_history"] = []
+                st.session_state["last_action"] = "Dataset reset to original"
+                st.rerun()
+
         # -------- Delete Column --------
         st.markdown("### Delete a Column")
-        df = st.session_state.df  
+        df = st.session_state.df
         col1, col2 = st.columns([3, 1])
-        
+
         with col1:
             del_col = st.selectbox(
                 "Select column to delete",
@@ -1028,13 +1078,6 @@ if file is not None:
                 st.session_state.df = st.session_state.df.drop(columns=[del_col])
                 st.session_state["last_action"] = f"'{del_col}' column deleted"
                 st.rerun()
-
-        # -------- Reset --------
-        if st.button("🔄 Reset to Original Dataset", key="fill_reset_btn"):
-            st.session_state.df = st.session_state.original_df.copy()
-            st.session_state["df_history"] = []
-            st.session_state["last_action"] = "Dataset reset to original"
-            st.rerun()
 
         # -------- Download cleaned data --------
         st.markdown("### Download Cleaned Dataset")
@@ -1072,20 +1115,19 @@ if file is not None:
 
         # -------- Stats --------
         duplicate_count = int(df.duplicated(subset=subset).sum())
-        total_rows = len(df)
-        dup_percent = round((duplicate_count / total_rows) * 100, 2) if total_rows > 0 else 0
+        total_rows      = len(df)
+        dup_percent     = round((duplicate_count / total_rows) * 100, 2) if total_rows > 0 else 0
 
         col1, col2, col3 = st.columns(3)
-        col1.metric("Total Rows", f"{total_rows:,}")
-        col2.metric("Duplicate Rows", f"{duplicate_count:,}")
-        col3.metric("Duplicate %", f"{dup_percent}%")
+        col1.metric("Total Rows",      f"{total_rows:,}")
+        col2.metric("Duplicate Rows",  f"{duplicate_count:,}")
+        col3.metric("Duplicate %",     f"{dup_percent}%")
 
         # -------- Preview --------
         if duplicate_count == 0:
             st.success("No duplicate rows found 🎉")
         else:
             st.warning(f"⚠ {duplicate_count:,} duplicate rows found.")
-
             with st.expander("Preview Duplicate Rows"):
                 st.dataframe(
                     df[df.duplicated(subset=subset)].head(50),
@@ -1109,6 +1151,9 @@ if file is not None:
                 key="delete_dup",
                 disabled=duplicate_count == 0
             ):
+                if "df_history" not in st.session_state:
+                    st.session_state["df_history"] = []
+                st.session_state["df_history"].append(st.session_state.df.copy())
                 before = len(st.session_state.df)
                 st.session_state.df = st.session_state.df.drop_duplicates(
                     subset=subset
@@ -1120,8 +1165,20 @@ if file is not None:
         with btn2:
             if st.button("🔄 Reset to Original Dataset", key="reset_dup"):
                 st.session_state.df = st.session_state.original_df.copy()
+                st.session_state["df_history"] = []
                 st.session_state["dup_msg"] = "Dataset reset to original"
                 st.rerun()
+
+        # -------- Undo --------
+        history = st.session_state.get("df_history", [])
+        if st.button(
+            f"↩ Undo Last Action ({len(history)} steps)",
+            key="undo_dup_btn",
+            disabled=len(history) == 0
+        ):
+            st.session_state.df = st.session_state["df_history"].pop()
+            st.session_state["dup_msg"] = "Last action undone"
+            st.rerun()
 
         # -------- Download --------
         st.markdown("### Download Dataset")
@@ -1132,7 +1189,7 @@ if file is not None:
             file_name="cleaned_dataset.csv",
             mime="text/csv",
             key="download_dup"
-        )  
-
+        )
+        
 else:
     st.info("Upload a CSV file to begin.")
