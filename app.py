@@ -659,23 +659,37 @@ if file is not None:
     with eda_tab3:
         numeric_df = df.select_dtypes(include=np.number)
         num_cols   = numeric_df.shape[1]
- 
+
         if num_cols < 2:
             st.warning("⚠ Not enough numeric columns for correlation.")
         elif num_cols > 25:
             st.warning(f"⚠ Too many numeric columns ({num_cols}). Skipping heatmap for performance.")
             st.info("Tip: Remove columns or use Data Cleaning tab to reduce features.")
         else:
+            st.markdown("""
+            <div style="background:#0d1117; border:1px solid #21262d; border-radius:8px;
+                        padding:0.8rem 1.1rem; margin-bottom:1rem;
+                        font-family:'Space Mono',monospace; font-size:0.72rem; color:#8b949e;">
+                <span style="color:#f0f6fc; font-weight:700;">Correlation Guide &nbsp;·&nbsp;</span>
+                <span style="color:#3fb950;">+1 = Perfect Positive</span> &nbsp;·&nbsp;
+                <span style="color:#d29922;">0 = No Relation</span> &nbsp;·&nbsp;
+                <span style="color:#f85149;">-1 = Perfect Negative</span>
+                <br><span style="font-size:0.65rem; color:#3d444d; margin-top:0.3rem; display:block;">
+                    |0.8–1.0| Strong &nbsp;·&nbsp; |0.5–0.8| Moderate &nbsp;·&nbsp; |0.2–0.5| Weak &nbsp;·&nbsp; |0.0–0.2| Very Weak
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+
             corr = numeric_df.corr()
- 
+
             # ── Heatmap ──
             st.markdown("##### Correlation Heatmap")
-            annot = num_cols <= 15 
- 
+            annot = num_cols <= 15
+
             fig4, ax4 = plt.subplots(figsize=(max(6, num_cols * 0.6), max(5, num_cols * 0.5)))
             fig4.patch.set_facecolor("#0d1117")
             ax4.set_facecolor("#0d1117")
- 
+
             sns.heatmap(
                 corr,
                 annot=annot,
@@ -687,23 +701,22 @@ if file is not None:
                 annot_kws={"size": 7, "color": "#f0f6fc"},
                 cbar_kws={"shrink": 0.8}
             )
- 
+
             ax4.tick_params(colors="#8b949e", labelsize=7)
             ax4.set_xticklabels(ax4.get_xticklabels(), rotation=45, ha="right")
             ax4.set_yticklabels(ax4.get_yticklabels(), rotation=0)
- 
-            # colorbar styling
+
             cbar = ax4.collections[0].colorbar
             cbar.ax.tick_params(colors="#8b949e", labelsize=7)
             cbar.ax.yaxis.label.set_color("#8b949e")
- 
+
             for s in ax4.spines.values(): s.set_visible(False)
 
             plt.tight_layout()
             st.pyplot(fig4)
             download_chart(fig4, "corr_heatmap_download")
             plt.close(fig4)
- 
+
             # ── Top correlated pairs ──
             st.markdown("##### Top Correlated Pairs")
             corr_pairs = (
@@ -711,14 +724,30 @@ if file is not None:
                     .stack()
                     .reset_index()
             )
-            corr_pairs.columns    = ["Feature 1", "Feature 2", "Correlation"]
-            corr_pairs["Abs"]     = corr_pairs["Correlation"].abs()
-            corr_pairs            = (corr_pairs
-                                     .sort_values("Abs", ascending=False)
-                                     .drop(columns="Abs")
-                                     .head(10)
-                                     .reset_index(drop=True))
+            corr_pairs.columns = ["Feature 1", "Feature 2", "Correlation"]
+            corr_pairs["Abs"]  = corr_pairs["Correlation"].abs()
+            corr_pairs         = (corr_pairs
+                                  .sort_values("Abs", ascending=False)
+                                  .drop(columns="Abs")
+                                  .head(10)
+                                  .reset_index(drop=True))
             corr_pairs["Correlation"] = corr_pairs["Correlation"].round(4)
+
+            # ── Strength Label ──
+            def get_strength(val):
+                abs_val = abs(val)
+                direction = "Positive" if val > 0 else "Negative"
+                if abs_val >= 0.8:
+                    return f"Strong {direction}"
+                elif abs_val >= 0.5:
+                    return f"Moderate {direction}"
+                elif abs_val >= 0.2:
+                    return f"Weak {direction}"
+                else:
+                    return "Very Weak"
+
+            corr_pairs["Strength"] = corr_pairs["Correlation"].apply(get_strength)
+
             st.dataframe(corr_pairs, use_container_width=True)
 
 
@@ -730,27 +759,39 @@ if file is not None:
              "Line Chart", "Violin Plot", "Pie Chart"],
             key="chart_type"
         )
- 
+
         numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
         cat_cols     = df.select_dtypes(include="object").columns.tolist()
- 
-        x_col  = st.selectbox("Select X-axis", df.columns, key="x_col")
-        y_col  = None
+        all_cols     = df.columns.tolist()
+
+        # ── Auto column filter based on chart type ──
+        if chart_type in ["Histogram", "Box Plot", "Violin Plot"]:
+            x_options = numeric_cols if numeric_cols else all_cols
+            st.caption("ℹ️ Only numeric columns shown for this chart type.")
+        elif chart_type in ["Bar Chart", "Pie Chart"]:
+            x_options = cat_cols if cat_cols else all_cols
+            st.caption("ℹ️ Only categorical columns shown for this chart type.")
+        else:
+            x_options = all_cols
+
+        x_col   = st.selectbox("Select X-axis", x_options, key="x_col")
+        y_col   = None
         hue_col = None
- 
+
         if chart_type in ["Scatter Plot", "Line Chart"]:
-            y_col = st.selectbox("Select Y-axis", df.columns, key="y_col")
- 
+            y_options = numeric_cols if numeric_cols else all_cols
+            y_col = st.selectbox("Select Y-axis", y_options, key="y_col")
+
         if chart_type == "Scatter Plot" and cat_cols:
             hue_options = ["None"] + cat_cols
             hue_sel     = st.selectbox("Color by (optional)", hue_options, key="hue_col")
             hue_col     = None if hue_sel == "None" else hue_sel
- 
+
         if len(df) > 10000:
             st.caption(f"⚡ Large dataset ({len(df):,} rows) — chart will use 10,000 random samples.")
- 
+
         show_chart = st.button("Show Chart", key="show_chart_btn")
- 
+
         def style_ax(fig, ax):
             fig.patch.set_facecolor("#0d1117")
             ax.set_facecolor("#0d1117")
@@ -760,49 +801,42 @@ if file is not None:
             for s in ax.spines.values(): s.set_visible(False)
             ax.xaxis.grid(True, color="#161b22", linewidth=0.5)
             ax.yaxis.grid(True, color="#161b22", linewidth=0.5)
- 
+
         if show_chart:
             with st.spinner("Generating chart... ⏳"):
                 try:
-                    # ── sample large data ──
                     plot_df = df.sample(10000, random_state=42) if len(df) > 10000 else df
- 
+
                     if chart_type == "Histogram":
-                        if x_col not in numeric_cols:
-                            st.error("❌ Histogram requires a numeric column.")
-                        else:
-                            fig, ax = plt.subplots(figsize=(7, 4))
-                            sns.histplot(plot_df[x_col].dropna(), bins=30,
-                                         color="#388bfd", alpha=0.8, ax=ax)
-                            ax.set_xlabel(x_col)
-                            ax.set_ylabel("Count")
-                            style_ax(fig, ax)
-                            plt.tight_layout()
-                            st.pyplot(fig)
-                            download_chart(fig, "histogram_download")
-                            plt.close(fig)
- 
+                        fig, ax = plt.subplots(figsize=(7, 4))
+                        sns.histplot(plot_df[x_col].dropna(), bins=30,
+                                     color="#388bfd", alpha=0.8, ax=ax)
+                        ax.set_xlabel(x_col)
+                        ax.set_ylabel("Count")
+                        style_ax(fig, ax)
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        download_chart(fig, "viz_histogram_download")
+                        plt.close(fig)
+
                     elif chart_type == "Box Plot":
-                        if x_col not in numeric_cols:
-                            st.error("❌ Box Plot requires a numeric column.")
-                        else:
-                            fig, ax = plt.subplots(figsize=(7, 4))
-                            ax.boxplot(plot_df[x_col].dropna(), vert=False,
-                                       patch_artist=True, widths=0.5,
-                                       boxprops    =dict(facecolor="#161b22", color="#388bfd"),
-                                       medianprops =dict(color="#f78166", linewidth=2),
-                                       whiskerprops=dict(color="#388bfd"),
-                                       capprops    =dict(color="#388bfd"),
-                                       flierprops  =dict(marker="o", color="#d29922",
-                                                         markersize=3, alpha=0.5))
-                            ax.set_xlabel(x_col)
-                            ax.set_yticks([])
-                            style_ax(fig, ax)
-                            plt.tight_layout()
-                            st.pyplot(fig)
-                            download_chart(fig, "box_download")
-                            plt.close(fig)
- 
+                        fig, ax = plt.subplots(figsize=(7, 4))
+                        ax.boxplot(plot_df[x_col].dropna(), vert=False,
+                                   patch_artist=True, widths=0.5,
+                                   boxprops    =dict(facecolor="#161b22", color="#388bfd"),
+                                   medianprops =dict(color="#f78166", linewidth=2),
+                                   whiskerprops=dict(color="#388bfd"),
+                                   capprops    =dict(color="#388bfd"),
+                                   flierprops  =dict(marker="o", color="#d29922",
+                                                     markersize=3, alpha=0.5))
+                        ax.set_xlabel(x_col)
+                        ax.set_yticks([])
+                        style_ax(fig, ax)
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        download_chart(fig, "viz_box_download")
+                        plt.close(fig)
+
                     elif chart_type == "Bar Chart":
                         counts = plot_df[x_col].value_counts().head(15)
                         fig, ax = plt.subplots(figsize=(7, 4))
@@ -816,16 +850,16 @@ if file is not None:
                         style_ax(fig, ax)
                         plt.tight_layout()
                         st.pyplot(fig)
-                        download_chart(fig, "bar_download")
+                        download_chart(fig, "viz_bar_download")
                         plt.close(fig)
- 
+
                     elif chart_type == "Scatter Plot":
                         if x_col not in numeric_cols or y_col not in numeric_cols:
                             st.error("❌ Scatter Plot requires numeric X and Y columns.")
                         else:
                             cols_needed = [x_col, y_col] + ([hue_col] if hue_col else [])
                             scatter_df  = plot_df[cols_needed].dropna()
- 
+
                             if scatter_df.empty:
                                 st.warning("⚠ No valid data after removing missing values.")
                             else:
@@ -852,9 +886,9 @@ if file is not None:
                                 style_ax(fig, ax)
                                 plt.tight_layout()
                                 st.pyplot(fig)
-                                download_chart(fig, "scatter_download")
+                                download_chart(fig, "viz_scatter_download")
                                 plt.close(fig)
- 
+
                     elif chart_type == "Line Chart":
                         if x_col not in numeric_cols or y_col not in numeric_cols:
                             st.error("❌ Line Chart requires numeric X and Y columns.")
@@ -868,28 +902,23 @@ if file is not None:
                             style_ax(fig, ax)
                             plt.tight_layout()
                             st.pyplot(fig)
-                            download_chart(fig, "line_download")
+                            download_chart(fig, "viz_line_download")
                             plt.close(fig)
- 
+
                     elif chart_type == "Violin Plot":
-                        if x_col not in numeric_cols:
-                            st.error("❌ Violin Plot requires a numeric column.")
-                        else:
-                            fig, ax = plt.subplots(figsize=(7, 4))
-                            sns.violinplot(x=plot_df[x_col].dropna(), ax=ax,
-                                           color="#388bfd", linecolor="#161b22",
-                                           linewidth=0.8, inner="box")
-                            ax.set_xlabel(x_col)
-                            style_ax(fig, ax)
-                            plt.tight_layout()
-                            st.pyplot(fig)
-                            download_chart(fig, "violin_download")
-                            plt.close(fig)
- 
+                        fig, ax = plt.subplots(figsize=(7, 4))
+                        sns.violinplot(x=plot_df[x_col].dropna(), ax=ax,
+                                       color="#388bfd", linecolor="#161b22",
+                                       linewidth=0.8, inner="box")
+                        ax.set_xlabel(x_col)
+                        style_ax(fig, ax)
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        download_chart(fig, "viz_violin_download")
+                        plt.close(fig)
+
                     elif chart_type == "Pie Chart":
                         counts = plot_df[x_col].value_counts().head(8)
-                        if len(counts) > 10:
-                            st.warning("⚠ Too many unique values for Pie Chart. Showing top 8.")
                         pie_colors = ["#388bfd","#3fb950","#f78166","#d29922",
                                       "#bc8cff","#79c0ff","#56d364","#e3b341"]
                         fig, ax = plt.subplots(figsize=(5, 5))
@@ -908,9 +937,9 @@ if file is not None:
                         ax.set_facecolor("#0d1117")
                         plt.tight_layout()
                         st.pyplot(fig)
-                        download_chart(fig, "pie_download")
+                        download_chart(fig, "viz_pie_download")
                         plt.close(fig)
- 
+
                 except Exception as e:
                     st.error(f"❌ Error generating chart: {e}")
 
