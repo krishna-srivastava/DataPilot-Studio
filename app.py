@@ -76,13 +76,13 @@ html, body, [class*="css"] {
 }
  
 .hero-title .dim {
-    color: #3d444d;
+    color: #8b949e;
 }
  
 .hero-desc {
     font-family: 'Space Mono', monospace;
     font-size: 0.72rem;
-    color: #3d444d;
+    color: #8b949e;
     letter-spacing: 0.08em;
 }
  
@@ -148,7 +148,7 @@ html, body, [class*="css"] {
     font-size: 0.58rem;
     text-transform: uppercase;
     letter-spacing: 0.15em;
-    color: #3d444d;
+    color: #8b949e;
     margin-bottom: 0.45rem;
 }
  
@@ -176,7 +176,7 @@ html, body, [class*="css"] {
 .stTabs [data-baseweb="tab"] {
     background: transparent;
     border-radius: 6px;
-    color: #3d444d;
+    color: #8b949e;
     font-family: 'Space Mono', monospace;
     font-size: 0.68rem;
     letter-spacing: 0.04em;
@@ -284,37 +284,48 @@ if file is not None:
         "Visualization", "Data Cleaning", "Duplicate Rows"
     ])
 
+
 # ---------- OVERVIEW ----------
     with eda_tab1:
-        st.subheader("Dataset Preview")
+
+        # ── Dataset Preview ──
+        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.3rem;">Dataset Preview</p>', unsafe_allow_html=True)
         st.dataframe(df.head(10), use_container_width=True)
 
+        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+
+        # ── Column Info ──
+        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Column Info</p>', unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
-            st.subheader("Column Names:")
+            st.markdown('<p style="font-size:0.78rem; color:#8b949e; margin-bottom:0.3rem;">Column Names</p>', unsafe_allow_html=True)
             st.write(df.columns.tolist())
         with col2:
-            st.subheader("Data Types:")
+            st.markdown('<p style="font-size:0.78rem; color:#8b949e; margin-bottom:0.3rem;">Data Types</p>', unsafe_allow_html=True)
             st.write(df.dtypes)
 
+        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+
         # ── Statistical Summary ──
-        st.subheader("Statistical Summary")
+        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Statistical Summary</p>', unsafe_allow_html=True)
         numeric_cols = df.select_dtypes(include=['number']).columns
         object_cols  = df.select_dtypes(include=['object', 'category']).columns
         bool_cols    = df.select_dtypes(include=['bool']).columns
 
         if len(numeric_cols) > 0:
-            st.write("**Numerical Columns**")
+            st.markdown('<p style="font-size:0.75rem; color:#388bfd; margin-bottom:0.3rem;">▸ Numerical Columns</p>', unsafe_allow_html=True)
             st.dataframe(df[numeric_cols].describe().round(2), use_container_width=True)
         if len(object_cols) > 0:
-            st.write("**Categorical Columns**")
+            st.markdown('<p style="font-size:0.75rem; color:#3fb950; margin-bottom:0.3rem;">▸ Categorical Columns</p>', unsafe_allow_html=True)
             st.dataframe(df[object_cols].describe(), use_container_width=True)
         if len(bool_cols) > 0:
-            st.write("**Boolean Columns**")
+            st.markdown('<p style="font-size:0.75rem; color:#d29922; margin-bottom:0.3rem;">▸ Boolean Columns</p>', unsafe_allow_html=True)
             st.dataframe(df[bool_cols].describe(), use_container_width=True)
 
+        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+
         # ── Missing Values ──
-        st.subheader("Missing Values")
+        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Missing Values</p>', unsafe_allow_html=True)
         missing         = df.isnull().sum()
         missing_percent = (missing / len(df)) * 100
         missing_df      = pd.DataFrame({
@@ -327,8 +338,10 @@ if file is not None:
         else:
             st.dataframe(missing_filtered, use_container_width=True)
 
+        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+
         # ── DATA HEALTH SCORE ──
-        st.subheader("Data Health Score")
+        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Data Health Score</p>', unsafe_allow_html=True)
 
         total_cells    = df.shape[0] * df.shape[1]
         missing_pct    = (df.isnull().sum().sum() / total_cells) * 100
@@ -343,7 +356,6 @@ if file is not None:
         outlier_total = sum(outlier_counts)
         outlier_pct   = (outlier_total / len(df)) * 100 if len(df) > 0 else 0
 
-        # Score calculation (100 mein se)
         missing_score = max(0, 100 - missing_pct * 2)
         dup_score     = max(0, 100 - dup_pct * 3)
         outlier_score = max(0, 100 - outlier_pct * 1.5)
@@ -361,8 +373,8 @@ if file is not None:
 
         st.markdown(f"""
         <div style="background:#0d1117; border:1px solid #21262d; border-radius:10px; padding:1.2rem; margin-bottom:1rem;">
-            <div style="font-family:'Space Mono',monospace; font-size:0.65rem; color:#3d444d; text-transform:uppercase; letter-spacing:0.15em; margin-bottom:0.5rem;">Overall Health Score</div>
-            <div style="font-size:2.8rem; font-weight:800; color:{score_color}; line-height:1;">{health_score}<span style="font-size:1rem; color:#3d444d;">/100</span></div>
+            <div style="font-family:'Space Mono',monospace; font-size:0.65rem; color:#8b949e; text-transform:uppercase; letter-spacing:0.15em; margin-bottom:0.5rem;">Overall Health Score</div>
+            <div style="font-size:2.8rem; font-weight:800; color:{score_color}; line-height:1;">{health_score}<span style="font-size:1rem; color:#8b949e;">/100</span></div>
             <div style="font-family:'Space Mono',monospace; font-size:0.7rem; color:{score_color}; margin-top:0.3rem;">{score_label}</div>
             <div style="margin-top:0.8rem; background:#161b22; border-radius:6px; height:6px; overflow:hidden;">
                 <div style="width:{health_score}%; height:100%; background:{score_color}; border-radius:6px;"></div>
@@ -371,12 +383,14 @@ if file is not None:
         """, unsafe_allow_html=True)
 
         sc1, sc2, sc3 = st.columns(3)
-        sc1.metric("Missing Score",  f"{round(missing_score, 1)}/100", f"{missing_pct:.1f}% missing")
-        sc2.metric("Duplicate Score", f"{round(dup_score, 1)}/100",   f"{dup_pct:.1f}% duplicates")
-        sc3.metric("Outlier Score",  f"{round(outlier_score, 1)}/100", f"{outlier_pct:.1f}% outliers")
+        sc1.metric("Missing Score",   f"{round(missing_score, 1)}/100", f"{missing_pct:.1f}% missing")
+        sc2.metric("Duplicate Score", f"{round(dup_score, 1)}/100",     f"{dup_pct:.1f}% duplicates")
+        sc3.metric("Outlier Score",   f"{round(outlier_score, 1)}/100", f"{outlier_pct:.1f}% outliers")
+
+        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
 
         # ── OUTLIER DETECTION ──
-        st.subheader("Outlier Detection (IQR Method)")
+        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Outlier Detection (IQR Method)</p>', unsafe_allow_html=True)
 
         if len(numeric_cols) == 0:
             st.info("No numeric columns found for outlier detection.")
@@ -390,33 +404,34 @@ if file is not None:
                 count  = int(((df[col] < lower) | (df[col] > upper)).sum())
                 pct    = round((count / len(df)) * 100, 2)
                 outlier_rows.append({
-                    "Column"         : col,
-                    "Lower Bound"    : round(lower, 3),
-                    "Upper Bound"    : round(upper, 3),
-                    "Outlier Count"  : count,
-                    "Outlier %"      : pct
+                    "Column"        : col,
+                    "Lower Bound"   : round(float(lower), 3) if pd.notna(lower) else None,
+                    "Upper Bound"   : round(float(upper), 3) if pd.notna(upper) else None,
+                    "Outlier Count" : count,
+                    "Outlier %"     : pct
                 })
 
             outlier_df = pd.DataFrame(outlier_rows).sort_values("Outlier Count", ascending=False)
             st.dataframe(outlier_df, use_container_width=True)
 
 
+
 # ---------- COLUMN ANALYZER ----------
     with eda_tab2:
         column = st.selectbox("Select Column", df.columns, key="col_analyzer")
 
-        missing_count   = df[column].isnull().sum()
-        missing_percent = (missing_count / len(df)) * 100
-        unique_values   = df[column].nunique()
+        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
 
         colA, colB, colC, colD = st.columns(4)
         colA.metric("Data Type",      str(df[column].dtype))
-        colB.metric("Missing Values", int(missing_count))
-        colC.metric("Missing %",      f"{missing_percent:.2f}%")
-        colD.metric("Unique Values",  int(unique_values))
+        colB.metric("Missing Values", int(df[column].isnull().sum()))
+        colC.metric("Missing %",      f"{(df[column].isnull().sum() / len(df)) * 100:.2f}%")
+        colD.metric("Unique Values",  int(df[column].nunique()))
+
+        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
 
         # ── NUMERIC ──
-        if np.issubdtype(df[column].dtype, np.number):
+        if pd.api.types.is_numeric_dtype(df[column]):
 
             mean_val   = df[column].mean()
             median_val = df[column].median()
@@ -427,17 +442,19 @@ if file is not None:
             kurt_val   = df[column].kurt()
 
             colE, colF, colG = st.columns(3)
-            colE.metric("Mean",     round(mean_val, 2))
-            colF.metric("Median",   round(median_val, 2))
-            colG.metric("Std Dev",  round(std_val, 2))
+            colE.metric("Mean",    round(mean_val, 2))
+            colF.metric("Median",  round(median_val, 2))
+            colG.metric("Std Dev", round(std_val, 2))
 
             colH, colI, colJ = st.columns(3)
             colH.metric("Min",      round(min_val, 2))
             colI.metric("Max",      round(max_val, 2))
             colJ.metric("Skewness", round(skew_val, 2))
 
+            st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
+
             # ── Skewness & Kurtosis Interpretation ──
-            st.markdown("#### Distribution Interpretation")
+            st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Distribution Interpretation</p>', unsafe_allow_html=True)
 
             if skew_val > 1:
                 skew_label = "Highly Right Skewed"
@@ -469,7 +486,7 @@ if file is not None:
             interp_l.markdown(f"""
             <div style="background:#0d1117; border:1px solid #21262d; border-left:3px solid {skew_color};
                         border-radius:8px; padding:0.8rem 1rem;">
-                <div style="font-family:'Space Mono',monospace; font-size:0.6rem; color:#3d444d;
+                <div style="font-family:'Space Mono',monospace; font-size:0.6rem; color:#8b949e;
                             text-transform:uppercase; letter-spacing:0.15em; margin-bottom:0.4rem;">
                     Skewness · {round(skew_val, 3)}
                 </div>
@@ -480,7 +497,7 @@ if file is not None:
             interp_r.markdown(f"""
             <div style="background:#0d1117; border:1px solid #21262d; border-left:3px solid {kurt_color};
                         border-radius:8px; padding:0.8rem 1rem;">
-                <div style="font-family:'Space Mono',monospace; font-size:0.6rem; color:#3d444d;
+                <div style="font-family:'Space Mono',monospace; font-size:0.6rem; color:#8b949e;
                             text-transform:uppercase; letter-spacing:0.15em; margin-bottom:0.4rem;">
                     Kurtosis · {round(kurt_val, 3)}
                 </div>
@@ -488,16 +505,17 @@ if file is not None:
             </div>
             """, unsafe_allow_html=True)
 
-            # sample for performance
+            st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
+
+            # ── Charts ──
             clean = df[column].dropna()
             if len(clean) > 5000:
                 clean = clean.sample(5000, random_state=42)
 
             chart_l, chart_r = st.columns(2)
 
-            # Histogram + KDE
             with chart_l:
-                st.markdown("##### Distribution")
+                st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.5rem;">Distribution</p>', unsafe_allow_html=True)
                 fig, ax = plt.subplots(figsize=(5, 3))
                 fig.patch.set_facecolor("#0d1117")
                 ax.set_facecolor("#0d1117")
@@ -521,9 +539,8 @@ if file is not None:
                 download_chart(fig, key="hist_download")
                 plt.close()
 
-            # Box plot
             with chart_r:
-                st.markdown("##### Box Plot")
+                st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.5rem;">Box Plot</p>', unsafe_allow_html=True)
                 fig, ax = plt.subplots(figsize=(5, 3))
                 fig.patch.set_facecolor("#0d1117")
                 ax.set_facecolor("#0d1117")
@@ -544,8 +561,10 @@ if file is not None:
                 download_chart(fig, key="box_download")
                 plt.close()
 
-            # ── OUTLIER ROWS PREVIEW ──
-            st.markdown("#### Outlier Rows Preview (IQR Method)")
+            st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
+
+            # ── OUTLIER DETECTION ──
+            st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Outlier Detection (IQR Method)</p>', unsafe_allow_html=True)
 
             q1, q3 = df[column].quantile(0.25), df[column].quantile(0.75)
             iqr    = q3 - q1
@@ -556,8 +575,8 @@ if file is not None:
             outlier_rows = df[outlier_mask]
 
             oc1, oc2, oc3 = st.columns(3)
-            oc1.metric("Lower Bound", round(lower, 3))
-            oc2.metric("Upper Bound", round(upper, 3))
+            oc1.metric("Lower Bound",  round(lower, 3))
+            oc2.metric("Upper Bound",  round(upper, 3))
             oc3.metric("Outlier Rows", len(outlier_rows))
 
             if outlier_rows.empty:
@@ -584,8 +603,10 @@ if file is not None:
             colE.metric("Most Frequent Value", str(most_frequent))
             colF.metric("Top Value Count",     int(top_count))
 
-            # ── Value Distribution % Table ──
-            st.markdown("#### Value Distribution")
+            st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
+
+            # ── Value Distribution ──
+            st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Value Distribution</p>', unsafe_allow_html=True)
             vc_table = pd.DataFrame({
                 "Value"      : vc.index,
                 "Count"      : vc.values,
@@ -594,16 +615,17 @@ if file is not None:
             vc_table["Percentage"] = vc_table["Percentage"].astype(str) + " %"
             st.dataframe(vc_table, use_container_width=True)
 
+            st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
+
             MAX_BARS  = 20
             vc_plot   = vc.head(MAX_BARS)
             truncated = len(vc) > MAX_BARS
 
             chart_l, chart_r = st.columns(2)
 
-            # Bar chart
             with chart_l:
-                title = f"##### Top {MAX_BARS} Values" if truncated else "##### Value Counts"
-                st.markdown(title)
+                title_text = f"Top {MAX_BARS} Values" if truncated else "Value Counts"
+                st.markdown(f'<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.5rem;">{title_text}</p>', unsafe_allow_html=True)
                 fig, ax = plt.subplots(figsize=(5, max(3, len(vc_plot) * 0.35)))
                 fig.patch.set_facecolor("#0d1117")
                 ax.set_facecolor("#0d1117")
@@ -620,13 +642,12 @@ if file is not None:
                 download_chart(fig, key="bar_download")
                 plt.close()
 
-            # Pie chart
             with chart_r:
                 if len(vc) <= 10:
-                    st.markdown("##### Distribution")
+                    st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.5rem;">Distribution</p>', unsafe_allow_html=True)
                     pie_data = vc
                 else:
-                    st.markdown("##### Top 10 Share")
+                    st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.5rem;">Top 10 Share</p>', unsafe_allow_html=True)
                     top10    = vc.head(10)
                     other    = vc.iloc[10:].sum()
                     pie_data = pd.concat([top10, pd.Series({"Other": other})])
@@ -655,6 +676,7 @@ if file is not None:
                 plt.close()
 
 
+
 # ---------- CORRELATION ----------
     with eda_tab3:
         numeric_df = df.select_dtypes(include=np.number)
@@ -674,7 +696,7 @@ if file is not None:
                 <span style="color:#3fb950;">+1 = Perfect Positive</span> &nbsp;·&nbsp;
                 <span style="color:#d29922;">0 = No Relation</span> &nbsp;·&nbsp;
                 <span style="color:#f85149;">-1 = Perfect Negative</span>
-                <br><span style="font-size:0.65rem; color:#3d444d; margin-top:0.3rem; display:block;">
+                <br><span style="font-size:0.65rem; color:#8b949e; margin-top:0.3rem; display:block;">
                     |0.8–1.0| Strong &nbsp;·&nbsp; |0.5–0.8| Moderate &nbsp;·&nbsp; |0.2–0.5| Weak &nbsp;·&nbsp; |0.0–0.2| Very Weak
                 </span>
             </div>
@@ -683,7 +705,7 @@ if file is not None:
             corr = numeric_df.corr()
 
             # ── Heatmap ──
-            st.markdown("##### Correlation Heatmap")
+            st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Correlation Heatmap</p>', unsafe_allow_html=True)
             annot = num_cols <= 15
 
             fig4, ax4 = plt.subplots(figsize=(max(6, num_cols * 0.6), max(5, num_cols * 0.5)))
@@ -717,8 +739,10 @@ if file is not None:
             download_chart(fig4, "corr_heatmap_download")
             plt.close(fig4)
 
+            st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+
             # ── Top correlated pairs ──
-            st.markdown("##### Top Correlated Pairs")
+            st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Top Correlated Pairs</p>', unsafe_allow_html=True)
             corr_pairs = (
                 corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
                     .stack()
@@ -733,9 +757,8 @@ if file is not None:
                                   .reset_index(drop=True))
             corr_pairs["Correlation"] = corr_pairs["Correlation"].round(4)
 
-            # ── Strength Label ──
             def get_strength(val):
-                abs_val = abs(val)
+                abs_val   = abs(val)
                 direction = "Positive" if val > 0 else "Negative"
                 if abs_val >= 0.8:
                     return f"Strong {direction}"
@@ -747,12 +770,15 @@ if file is not None:
                     return "Very Weak"
 
             corr_pairs["Strength"] = corr_pairs["Correlation"].apply(get_strength)
-
             st.dataframe(corr_pairs, use_container_width=True)
+
 
 
 # ---------- VISUALIZATION ----------
     with eda_tab4:
+
+        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Chart Settings</p>', unsafe_allow_html=True)
+
         chart_type = st.selectbox(
             "Select Chart Type",
             ["Histogram", "Box Plot", "Bar Chart", "Scatter Plot",
@@ -764,7 +790,6 @@ if file is not None:
         cat_cols     = df.select_dtypes(include="object").columns.tolist()
         all_cols     = df.columns.tolist()
 
-        # ── Auto column filter based on chart type ──
         if chart_type in ["Histogram", "Box Plot", "Violin Plot"]:
             x_options = numeric_cols if numeric_cols else all_cols
             st.caption("ℹ️ Only numeric columns shown for this chart type.")
@@ -803,6 +828,9 @@ if file is not None:
             ax.yaxis.grid(True, color="#161b22", linewidth=0.5)
 
         if show_chart:
+            st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
+            st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Chart Output</p>', unsafe_allow_html=True)
+
             with st.spinner("Generating chart... ⏳"):
                 try:
                     plot_df = df.sample(10000, random_state=42) if len(df) > 10000 else df
@@ -944,13 +972,14 @@ if file is not None:
                     st.error(f"❌ Error generating chart: {e}")
 
 
+
 # ---------- Missing Values ----------
     with eda_tab5:
-        st.subheader("Missing Values Table")
-
         df = st.session_state.df
 
-        # -------- Missing calculation --------
+        # ── Missing Values Table ──
+        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Missing Values Table</p>', unsafe_allow_html=True)
+
         missing = df.isnull().sum()
         missing = missing[missing > 0]
 
@@ -965,10 +994,12 @@ if file is not None:
             st.caption("Only columns with missing values are shown below")
             st.dataframe(missing_df, use_container_width=True)
 
-            # -------- Fill section --------
-            st.markdown("### Fill Missing Values")
-            col1, col2 = st.columns(2)
+            st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
 
+            # ── Fill Missing Values ──
+            st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Fill Missing Values</p>', unsafe_allow_html=True)
+
+            col1, col2 = st.columns(2)
             with col1:
                 selected_col = st.selectbox(
                     "Select Column",
@@ -976,7 +1007,7 @@ if file is not None:
                     key="col_select"
                 )
 
-            is_numeric = np.issubdtype(df[selected_col].dtype, np.number)
+            is_numeric = pd.api.types.is_numeric_dtype(df[selected_col])
             if is_numeric:
                 method_options = ["Mean", "Median", "Mode", "Custom Value"]
             else:
@@ -989,7 +1020,6 @@ if file is not None:
                     key="method_select"
                 )
 
-            # ── Custom value input ──
             custom_value = None
             if method == "Custom Value":
                 custom_value = st.text_input(
@@ -998,7 +1028,6 @@ if file is not None:
                     key="custom_fill_val"
                 )
 
-            # -------- Fill button --------
             if st.button("Fill Missing", key="fill_btn"):
                 if method == "Mean":
                     value = df[selected_col].mean()
@@ -1016,7 +1045,7 @@ if file is not None:
                             try:
                                 value = float(custom_value)
                             except ValueError:
-                                st.error("Numeric column hai — number enter karo ❌")
+                                st.error("Numeric column — please enter a number ❌")
                                 value = None
                         else:
                             value = custom_value
@@ -1030,36 +1059,53 @@ if file is not None:
                     st.session_state["last_action"] = f"'{selected_col}' filled using {method}"
                     st.rerun()
 
-        # -------- Show success after rerun --------
+        # ── Success message ──
         if "last_action" in st.session_state:
             st.success(st.session_state["last_action"] + " ✅")
             del st.session_state["last_action"]
 
-        # -------- Undo button --------
-        st.markdown("### Undo / Reset")
-        undo_col, reset_col = st.columns(2)
+        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
 
-        history = st.session_state.get("df_history", [])
+        # ── Rename Column ──
+        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Rename a Column</p>', unsafe_allow_html=True)
 
-        with undo_col:
-            if st.button(
-                f"↩ Undo Last Action ({len(history)} steps)",
-                key="undo_btn",
-                disabled=len(history) == 0
-            ):
-                st.session_state.df = st.session_state["df_history"].pop()
-                st.session_state["last_action"] = "Last action undone"
+        df = st.session_state.df
+        rn1, rn2, rn3 = st.columns([2, 2, 1])
+
+        with rn1:
+            rename_col = st.selectbox(
+                "Select Column",
+                df.columns.tolist(),
+                key="rename_col"
+            )
+        with rn2:
+            new_name = st.text_input(
+                "New Name",
+                placeholder="Enter new column name",
+                key="rename_new"
+            )
+        with rn3:
+            st.markdown("<br>", unsafe_allow_html=True)
+            rename_btn = st.button("Rename", key="rename_btn")
+
+        if rename_btn:
+            if not new_name.strip():
+                st.error("New name cannot be empty ❌")
+            elif new_name.strip() in df.columns and new_name.strip() != rename_col:
+                st.error(f"Column '{new_name}' already exists ❌")
+            else:
+                if "df_history" not in st.session_state:
+                    st.session_state["df_history"] = []
+                st.session_state["df_history"].append(st.session_state.df.copy())
+                st.session_state.df = st.session_state.df.rename(columns={rename_col: new_name.strip()})
+                st.session_state["last_action"] = f"'{rename_col}' renamed to '{new_name.strip()}'"
                 st.rerun()
 
-        with reset_col:
-            if st.button("🔄 Reset to Original Dataset", key="fill_reset_btn"):
-                st.session_state.df = st.session_state.original_df.copy()
-                st.session_state["df_history"] = []
-                st.session_state["last_action"] = "Dataset reset to original"
-                st.rerun()
+        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
 
-        # -------- Delete Column --------
-        st.markdown("### Delete a Column")
+        # ── Delete Column ──
+        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Delete a Column</p>', unsafe_allow_html=True)
+
         df = st.session_state.df
         col1, col2 = st.columns([3, 1])
 
@@ -1079,8 +1125,36 @@ if file is not None:
                 st.session_state["last_action"] = f"'{del_col}' column deleted"
                 st.rerun()
 
-        # -------- Download cleaned data --------
-        st.markdown("### Download Cleaned Dataset")
+        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+ 
+        # ── Undo / Reset ──
+        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Undo / Reset</p>', unsafe_allow_html=True)
+
+        history  = st.session_state.get("df_history", [])
+        undo_col, reset_col = st.columns(2)
+
+        with undo_col:
+            if st.button(
+                f"↩ Undo Last Action ({len(history)} steps)",
+                key="undo_btn",
+                disabled=len(history) == 0
+            ):
+                st.session_state.df = st.session_state["df_history"].pop()
+                st.session_state["last_action"] = "Last action undone"
+                st.rerun()
+
+        with reset_col:
+            if st.button("🔄 Reset to Original Dataset", key="fill_reset_btn"):
+                st.session_state.df = st.session_state.original_df.copy()
+                st.session_state["df_history"] = []
+                st.session_state["last_action"] = "Dataset reset to original"
+                st.rerun()
+
+        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+
+        # ── Download ──
+        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Download Cleaned Dataset</p>', unsafe_allow_html=True)
+
         csv = st.session_state.df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="Download CSV",
@@ -1090,13 +1164,12 @@ if file is not None:
         )
 
 
+
 # ---------- Duplicated Values ----------
     with eda_tab6:
         df = st.session_state.df
 
-        # -------- Select Column to check duplicates --------
-        st.markdown("### Select Column to Check Duplicates")
-
+        # ── Check Mode ──
         check_mode = st.radio(
             "Check duplicates based on:",
             ["All Columns", "Specific Column"],
@@ -1113,17 +1186,19 @@ if file is not None:
             )
             subset = [selected_col]
 
-        # -------- Stats --------
+        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+
+        # ── Stats ──
         duplicate_count = int(df.duplicated(subset=subset).sum())
         total_rows      = len(df)
         dup_percent     = round((duplicate_count / total_rows) * 100, 2) if total_rows > 0 else 0
 
         col1, col2, col3 = st.columns(3)
-        col1.metric("Total Rows",      f"{total_rows:,}")
-        col2.metric("Duplicate Rows",  f"{duplicate_count:,}")
-        col3.metric("Duplicate %",     f"{dup_percent}%")
+        col1.metric("Total Rows",     f"{total_rows:,}")
+        col2.metric("Duplicate Rows", f"{duplicate_count:,}")
+        col3.metric("Duplicate %",    f"{dup_percent}%")
 
-        # -------- Preview --------
+        # ── Preview ──
         if duplicate_count == 0:
             st.success("No duplicate rows found 🎉")
         else:
@@ -1136,13 +1211,16 @@ if file is not None:
                 if duplicate_count > 50:
                     st.caption(f"Showing 50 of {duplicate_count:,} duplicate rows.")
 
-        # -------- Message --------
+        # ── Message ──
         if "dup_msg" in st.session_state:
             st.success(st.session_state["dup_msg"] + " ✅")
             del st.session_state["dup_msg"]
 
-        # -------- Actions --------
-        st.markdown("### Actions")
+        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+
+        # ── Actions ──
+        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Actions</p>', unsafe_allow_html=True)
+
         btn1, btn2 = st.columns(2)
 
         with btn1:
@@ -1169,7 +1247,7 @@ if file is not None:
                 st.session_state["dup_msg"] = "Dataset reset to original"
                 st.rerun()
 
-        # -------- Undo --------
+        # ── Undo ──
         history = st.session_state.get("df_history", [])
         if st.button(
             f"↩ Undo Last Action ({len(history)} steps)",
@@ -1180,8 +1258,11 @@ if file is not None:
             st.session_state["dup_msg"] = "Last action undone"
             st.rerun()
 
-        # -------- Download --------
-        st.markdown("### Download Dataset")
+        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+
+        # ── Download ──
+        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Download Dataset</p>', unsafe_allow_html=True)
+
         csv = st.session_state.df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="Download Cleaned CSV",
@@ -1190,6 +1271,7 @@ if file is not None:
             mime="text/csv",
             key="download_dup"
         )
-        
+
+       
 else:
     st.info("Upload a CSV file to begin.")
