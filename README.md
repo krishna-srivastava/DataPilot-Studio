@@ -91,22 +91,14 @@ streamlit run app.py
 
 ---
 
-## 📦 requirements.txt
-streamlit
-pandas
-numpy
-matplotlib
-seaborn
-pyarrow
-
----
-
 ## App Preview:
 ![DataPilot Studio Screenshot](app_screenshot.png)
 
 ---
 
 ## 🙋‍♂️ Author
-**krishna srivastava**  
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?style=flat&logo=linkedin)]([https://linkedin.com/in/your-profile](https://www.linkedin.com/in/krishna-srivastava-b402a1323/))
+
+**Krishna Srivastava**  
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?style=flat&logo=linkedin)](https://linkedin.com/in/krishna-srivastava-b402a1323)
+[![GitHub](https://img.shields.io/badge/GitHub-Follow-black?style=flat&logo=github)](https://github.com/krishna-srivastava)
 [![GitHub](https://img.shields.io/badge/GitHub-Follow-black?style=flat&logo=github)](https://github.com/krishna-srivastava)
