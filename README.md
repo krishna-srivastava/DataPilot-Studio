@@ -75,7 +75,7 @@ A powerful, dark-themed **Exploratory Data Analysis (EDA)** and **Data Cleaning*
 
 **1. Clone the repository**
 ```bash
-git clone https://github.com/your-username/datapilot-studio.git
+git clone https://github.com/krishna-srivastava/datapilot-studio.git
 cd datapilot-studio
 ```
 
