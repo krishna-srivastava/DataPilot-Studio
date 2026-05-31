@@ -19,12 +19,21 @@ def download_chart(fig, key):
  
 @st.cache_data
 def load_data(file_bytes):
-    df = pd.read_csv(io.BytesIO(file_bytes), engine="pyarrow")
-    for col in df.select_dtypes(include=["object"]).columns:
-        df[col] = df[col].apply(
-            lambda x: x.decode("utf-8", errors="ignore") if isinstance(x, bytes) else x
-        )
-    return df
+    if not file_bytes or len(file_bytes.strip()) == 0:
+        raise ValueError("Uploaded CSV file is empty.")
+    try:
+        df = pd.read_csv(io.BytesIO(file_bytes), engine="pyarrow")
+        if df.empty:
+            raise ValueError("CSV has no data rows.")
+        if df.shape[1] == 0:
+            raise ValueError("CSV has no columns.")
+        for col in df.select_dtypes(include=["object"]).columns:
+            df[col] = df[col].apply(
+                lambda x: x.decode("utf-8", errors="ignore") if isinstance(x, bytes) else x
+            )
+        return df
+    except Exception as e:
+        raise ValueError(f"Invalid CSV file: {str(e)}")
  
 # ================= PAGE CONFIG =================
 st.set_page_config(page_title="DataPilot Studio", layout="wide", page_icon="🛸")
@@ -235,9 +244,13 @@ if file is not None:
         st.stop()
  
     if "file_name" not in st.session_state or st.session_state.file_name != file.name:
-        st.session_state.file_name    = file.name
-        st.session_state.original_df  = load_data(file.read())   
-        st.session_state.df           = st.session_state.original_df.copy()
+        try:
+            st.session_state.file_name   = file.name
+            st.session_state.original_df = load_data(file.read())
+            st.session_state.df          = st.session_state.original_df.copy()
+        except ValueError as e:
+            st.markdown(f'<div class="banner banner-err">✕ &nbsp;{str(e)}</div>', unsafe_allow_html=True)
+            st.stop()
  
     if "df" not in st.session_state:
         st.markdown('<div class="banner banner-warn">⚠ Data not initialized — please re-upload.</div>', unsafe_allow_html=True)
@@ -418,262 +431,266 @@ if file is not None:
 
 # ---------- COLUMN ANALYZER ----------
     with eda_tab2:
-        column = st.selectbox("Select Column", df.columns, key="col_analyzer")
+        df = st.session_state.df
 
-        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
-
-        colA, colB, colC, colD = st.columns(4)
-        colA.metric("Data Type",      str(df[column].dtype))
-        colB.metric("Missing Values", int(df[column].isnull().sum()))
-        colC.metric("Missing %",      f"{(df[column].isnull().sum() / len(df)) * 100:.2f}%")
-        colD.metric("Unique Values",  int(df[column].nunique()))
-
-        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
-
-        # ── NUMERIC ──
-        if pd.api.types.is_numeric_dtype(df[column]):
-
-            mean_val   = df[column].mean()
-            median_val = df[column].median()
-            std_val    = df[column].std()
-            min_val    = df[column].min()
-            max_val    = df[column].max()
-            skew_val   = df[column].skew()
-            kurt_val   = df[column].kurt()
-
-            colE, colF, colG = st.columns(3)
-            colE.metric("Mean",    round(mean_val, 2))
-            colF.metric("Median",  round(median_val, 2))
-            colG.metric("Std Dev", round(std_val, 2))
-
-            colH, colI, colJ = st.columns(3)
-            colH.metric("Min",      round(min_val, 2))
-            colI.metric("Max",      round(max_val, 2))
-            colJ.metric("Skewness", round(skew_val, 2))
-
-            st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
-
-            # ── Skewness & Kurtosis Interpretation ──
-            st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Distribution Interpretation</p>', unsafe_allow_html=True)
-
-            if skew_val > 1:
-                skew_label = "Highly Right Skewed"
-                skew_color = "#f85149"
-            elif skew_val > 0.5:
-                skew_label = "Moderately Right Skewed"
-                skew_color = "#d29922"
-            elif skew_val < -1:
-                skew_label = "Highly Left Skewed"
-                skew_color = "#f85149"
-            elif skew_val < -0.5:
-                skew_label = "Moderately Left Skewed"
-                skew_color = "#d29922"
-            else:
-                skew_label = "Approximately Symmetric"
-                skew_color = "#3fb950"
-
-            if kurt_val > 3:
-                kurt_label = "Leptokurtic — heavy tails, sharp peak (outliers likely)"
-                kurt_color = "#f85149"
-            elif kurt_val < -1:
-                kurt_label = "Platykurtic — light tails, flat distribution"
-                kurt_color = "#d29922"
-            else:
-                kurt_label = "Mesokurtic — normal-like tails"
-                kurt_color = "#3fb950"
-
-            interp_l, interp_r = st.columns(2)
-            interp_l.markdown(f"""
-            <div style="background:#0d1117; border:1px solid #21262d; border-left:3px solid {skew_color};
-                        border-radius:8px; padding:0.8rem 1rem;">
-                <div style="font-family:'Space Mono',monospace; font-size:0.6rem; color:#8b949e;
-                            text-transform:uppercase; letter-spacing:0.15em; margin-bottom:0.4rem;">
-                    Skewness · {round(skew_val, 3)}
-                </div>
-                <div style="font-size:0.78rem; color:{skew_color};">{skew_label}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            interp_r.markdown(f"""
-            <div style="background:#0d1117; border:1px solid #21262d; border-left:3px solid {kurt_color};
-                        border-radius:8px; padding:0.8rem 1rem;">
-                <div style="font-family:'Space Mono',monospace; font-size:0.6rem; color:#8b949e;
-                            text-transform:uppercase; letter-spacing:0.15em; margin-bottom:0.4rem;">
-                    Kurtosis · {round(kurt_val, 3)}
-                </div>
-                <div style="font-size:0.78rem; color:{kurt_color};">{kurt_label}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
-
-            # ── Charts ──
-            clean = df[column].dropna()
-            if len(clean) > 5000:
-                clean = clean.sample(5000, random_state=42)
-
-            chart_l, chart_r = st.columns(2)
-
-            with chart_l:
-                st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.5rem;">Distribution</p>', unsafe_allow_html=True)
-                fig, ax = plt.subplots(figsize=(5, 3))
-                fig.patch.set_facecolor("#0d1117")
-                ax.set_facecolor("#0d1117")
-                ax.hist(clean, bins=30, color="#388bfd", alpha=0.7, edgecolor="none")
-                ax2 = ax.twinx()
-                clean.plot.kde(ax=ax2, color="#f78166", linewidth=1.5)
-                ax2.set_ylabel("")
-                ax2.tick_params(left=False, right=False, labelleft=False, labelright=False)
-                ax2.set_facecolor("#0d1117")
-                for s in ax2.spines.values(): s.set_visible(False)
-                ax.axvline(mean_val,   color="#d29922", linewidth=1.2, linestyle="--", label="Mean")
-                ax.axvline(median_val, color="#3fb950", linewidth=1.2, linestyle="--", label="Median")
-                ax.set_xlabel(column, color="#8b949e", fontsize=8)
-                ax.set_ylabel("Count",  color="#8b949e", fontsize=8)
-                ax.tick_params(colors="#8b949e", labelsize=7)
-                for s in ax.spines.values(): s.set_visible(False)
-                ax.legend(fontsize=7, labelcolor="#8b949e",
-                          facecolor="#0d1117", edgecolor="#21262d")
-                plt.tight_layout()
-                st.pyplot(fig)
-                download_chart(fig, key="hist_download")
-                plt.close()
-
-            with chart_r:
-                st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.5rem;">Box Plot</p>', unsafe_allow_html=True)
-                fig, ax = plt.subplots(figsize=(5, 3))
-                fig.patch.set_facecolor("#0d1117")
-                ax.set_facecolor("#0d1117")
-                ax.boxplot(clean, vert=False, patch_artist=True, widths=0.5,
-                           boxprops    =dict(facecolor="#161b22", color="#388bfd"),
-                           medianprops =dict(color="#f78166", linewidth=2),
-                           whiskerprops=dict(color="#388bfd"),
-                           capprops    =dict(color="#388bfd"),
-                           flierprops  =dict(marker="o", color="#d29922",
-                                             markersize=3, alpha=0.5))
-                ax.set_xlabel(column, color="#8b949e", fontsize=8)
-                ax.tick_params(colors="#8b949e", labelsize=7)
-                ax.set_yticks([])
-                for s in ax.spines.values(): s.set_visible(False)
-                ax.xaxis.grid(True, color="#161b22", linewidth=0.5)
-                plt.tight_layout()
-                st.pyplot(fig)
-                download_chart(fig, key="box_download")
-                plt.close()
-
-            st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
-
-            # ── OUTLIER DETECTION ──
-            st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Outlier Detection (IQR Method)</p>', unsafe_allow_html=True)
-
-            q1, q3 = df[column].quantile(0.25), df[column].quantile(0.75)
-            iqr    = q3 - q1
-            lower  = q1 - 1.5 * iqr
-            upper  = q3 + 1.5 * iqr
-
-            outlier_mask = (df[column] < lower) | (df[column] > upper)
-            outlier_rows = df[outlier_mask]
-
-            oc1, oc2, oc3 = st.columns(3)
-            oc1.metric("Lower Bound",  round(lower, 3))
-            oc2.metric("Upper Bound",  round(upper, 3))
-            oc3.metric("Outlier Rows", len(outlier_rows))
-
-            if outlier_rows.empty:
-                st.success("No outliers found in this column 🎉")
-            else:
-                with st.expander(f"Preview {min(50, len(outlier_rows))} Outlier Rows"):
-                    st.dataframe(outlier_rows.head(50), use_container_width=True)
-                    if len(outlier_rows) > 50:
-                        st.caption(f"Showing 50 of {len(outlier_rows)} outlier rows.")
-
-        # ── CATEGORICAL ──
+        if len(df.columns) == 0:
+            st.warning("No columns remaining — go to **Data Cleaning** tab and reset the dataset. ❌")
         else:
-            vc = df[column].value_counts()
-
-            mode_val = df[column].mode()
-            if not mode_val.empty:
-                most_frequent = mode_val[0]
-                top_count     = vc.iloc[0]
-            else:
-                most_frequent = "N/A"
-                top_count     = 0
-
-            colE, colF = st.columns(2)
-            colE.metric("Most Frequent Value", str(most_frequent))
-            colF.metric("Top Value Count",     int(top_count))
+            column = st.selectbox("Select Column", df.columns, key="col_analyzer")
 
             st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
 
-            # ── Value Distribution ──
-            st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Value Distribution</p>', unsafe_allow_html=True)
-            vc_table = pd.DataFrame({
-                "Value"      : vc.index,
-                "Count"      : vc.values,
-                "Percentage" : (vc.values / len(df) * 100).round(2)
-            })
-            vc_table["Percentage"] = vc_table["Percentage"].astype(str) + " %"
-            st.dataframe(vc_table, use_container_width=True)
+            colA, colB, colC, colD = st.columns(4)
+            colA.metric("Data Type",      str(df[column].dtype))
+            colB.metric("Missing Values", int(df[column].isnull().sum()))
+            colC.metric("Missing %",      f"{(df[column].isnull().sum() / len(df)) * 100:.2f}%")
+            colD.metric("Unique Values",  int(df[column].nunique()))
 
             st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
 
-            MAX_BARS  = 20
-            vc_plot   = vc.head(MAX_BARS)
-            truncated = len(vc) > MAX_BARS
+            # ── NUMERIC ──
+            if pd.api.types.is_numeric_dtype(df[column]):
 
-            chart_l, chart_r = st.columns(2)
+                mean_val   = float(df[column].mean())
+                median_val = float(df[column].median())
+                std_val    = float(df[column].std())
+                min_val    = float(df[column].min())
+                max_val    = float(df[column].max())
+                skew_val   = float(df[column].skew())
+                kurt_val   = float(df[column].kurt())
 
-            with chart_l:
-                title_text = f"Top {MAX_BARS} Values" if truncated else "Value Counts"
-                st.markdown(f'<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.5rem;">{title_text}</p>', unsafe_allow_html=True)
-                fig, ax = plt.subplots(figsize=(5, max(3, len(vc_plot) * 0.35)))
-                fig.patch.set_facecolor("#0d1117")
-                ax.set_facecolor("#0d1117")
-                colors = ["#388bfd" if i == 0 else "#161b22"
-                          for i in range(len(vc_plot))]
-                ax.barh(vc_plot.index[::-1], vc_plot.values[::-1],
-                        color=colors[::-1], edgecolor="none")
-                ax.set_xlabel("Count", color="#8b949e", fontsize=8)
-                ax.tick_params(colors="#8b949e", labelsize=7)
-                for s in ax.spines.values(): s.set_visible(False)
-                ax.xaxis.grid(True, color="#161b22", linewidth=0.5)
-                plt.tight_layout()
-                st.pyplot(fig)
-                download_chart(fig, key="bar_download")
-                plt.close()
+                colE, colF, colG = st.columns(3)
+                colE.metric("Mean",    round(mean_val, 2))
+                colF.metric("Median",  round(median_val, 2))
+                colG.metric("Std Dev", round(std_val, 2))
 
-            with chart_r:
-                if len(vc) <= 10:
-                    st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.5rem;">Distribution</p>', unsafe_allow_html=True)
-                    pie_data = vc
+                colH, colI, colJ = st.columns(3)
+                colH.metric("Min",      round(min_val, 2))
+                colI.metric("Max",      round(max_val, 2))
+                colJ.metric("Skewness", round(skew_val, 2))
+
+                st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
+
+                # ── Skewness & Kurtosis Interpretation ──
+                st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Distribution Interpretation</p>', unsafe_allow_html=True)
+
+                if skew_val > 1:
+                    skew_label, skew_color = "Highly Right Skewed",     "#f85149"
+                elif skew_val > 0.5:
+                    skew_label, skew_color = "Moderately Right Skewed", "#d29922"
+                elif skew_val < -1:
+                    skew_label, skew_color = "Highly Left Skewed",      "#f85149"
+                elif skew_val < -0.5:
+                    skew_label, skew_color = "Moderately Left Skewed",  "#d29922"
                 else:
-                    st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.5rem;">Top 10 Share</p>', unsafe_allow_html=True)
-                    top10    = vc.head(10)
-                    other    = vc.iloc[10:].sum()
-                    pie_data = pd.concat([top10, pd.Series({"Other": other})])
+                    skew_label, skew_color = "Approximately Symmetric", "#3fb950"
 
-                pie_colors = ["#388bfd","#58a6ff","#3fb950","#d29922",
-                              "#f78166","#bc8cff","#79c0ff","#56d364",
-                              "#e3b341","#ff7b72","#8b949e"]
+                if kurt_val > 3:
+                    kurt_label = "Leptokurtic — heavy tails, sharp peak (outliers likely)"
+                    kurt_color = "#f85149"
+                elif kurt_val < -1:
+                    kurt_label = "Platykurtic — light tails, flat distribution"
+                    kurt_color = "#d29922"
+                else:
+                    kurt_label = "Mesokurtic — normal-like tails"
+                    kurt_color = "#3fb950"
 
-                fig, ax = plt.subplots(figsize=(4, 4))
-                fig.patch.set_facecolor("#0d1117")
-                wedges, texts, autotexts = ax.pie(
-                    pie_data.values,
-                    labels=pie_data.index,
-                    colors=pie_colors[:len(pie_data)],
-                    autopct="%1.1f%%", startangle=140,
-                    textprops={"color": "#8b949e", "fontsize": 7},
-                    wedgeprops={"edgecolor": "#0d1117", "linewidth": 1.5}
-                )
-                for at in autotexts:
-                    at.set_color("#f0f6fc")
-                    at.set_fontsize(7)
-                ax.set_facecolor("#0d1117")
-                plt.tight_layout()
-                st.pyplot(fig)
-                download_chart(fig, key="pie_download")
-                plt.close()
+                interp_l, interp_r = st.columns(2)
+                interp_l.markdown(f"""
+                <div style="background:#0d1117; border:1px solid #21262d; border-left:3px solid {skew_color};
+                            border-radius:8px; padding:0.8rem 1rem;">
+                    <div style="font-family:'Space Mono',monospace; font-size:0.6rem; color:#8b949e;
+                                text-transform:uppercase; letter-spacing:0.15em; margin-bottom:0.4rem;">
+                        Skewness · {round(skew_val, 3)}
+                    </div>
+                    <div style="font-size:0.78rem; color:{skew_color};">{skew_label}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                interp_r.markdown(f"""
+                <div style="background:#0d1117; border:1px solid #21262d; border-left:3px solid {kurt_color};
+                            border-radius:8px; padding:0.8rem 1rem;">
+                    <div style="font-family:'Space Mono',monospace; font-size:0.6rem; color:#8b949e;
+                                text-transform:uppercase; letter-spacing:0.15em; margin-bottom:0.4rem;">
+                        Kurtosis · {round(kurt_val, 3)}
+                    </div>
+                    <div style="font-size:0.78rem; color:{kurt_color};">{kurt_label}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
+
+                # ── Charts ──
+                clean = df[column].dropna().astype(float)  # ✅ bool/int fix
+                if len(clean) > 5000:
+                    clean = clean.sample(5000, random_state=42)
+
+                # KDE sirf tab kaam karta hai jab unique values >= 2 hon
+                can_kde = clean.nunique() >= 2
+
+                chart_l, chart_r = st.columns(2)
+
+                with chart_l:
+                    st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.5rem;">Distribution</p>', unsafe_allow_html=True)
+                    fig, ax = plt.subplots(figsize=(5, 3))
+                    fig.patch.set_facecolor("#0d1117")
+                    ax.set_facecolor("#0d1117")
+                    ax.hist(clean, bins=30, color="#388bfd", alpha=0.7, edgecolor="none")
+                    if can_kde:
+                        ax2 = ax.twinx()
+                        clean.plot.kde(ax=ax2, color="#f78166", linewidth=1.5)
+                        ax2.set_ylabel("")
+                        ax2.tick_params(left=False, right=False, labelleft=False, labelright=False)
+                        ax2.set_facecolor("#0d1117")
+                        for s in ax2.spines.values(): s.set_visible(False)
+                    ax.axvline(mean_val,   color="#d29922", linewidth=1.2, linestyle="--", label="Mean")
+                    ax.axvline(median_val, color="#3fb950", linewidth=1.2, linestyle="--", label="Median")
+                    ax.set_xlabel(column, color="#8b949e", fontsize=8)
+                    ax.set_ylabel("Count",  color="#8b949e", fontsize=8)
+                    ax.tick_params(colors="#8b949e", labelsize=7)
+                    for s in ax.spines.values(): s.set_visible(False)
+                    ax.legend(fontsize=7, labelcolor="#8b949e",
+                              facecolor="#0d1117", edgecolor="#21262d")
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    download_chart(fig, key="hist_download")
+                    plt.close()
+
+                with chart_r:
+                    st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.5rem;">Box Plot</p>', unsafe_allow_html=True)
+                    fig, ax = plt.subplots(figsize=(5, 3))
+                    fig.patch.set_facecolor("#0d1117")
+                    ax.set_facecolor("#0d1117")
+                    ax.boxplot(clean, vert=False, patch_artist=True, widths=0.5,
+                               boxprops    =dict(facecolor="#161b22", color="#388bfd"),
+                               medianprops =dict(color="#f78166", linewidth=2),
+                               whiskerprops=dict(color="#388bfd"),
+                               capprops    =dict(color="#388bfd"),
+                               flierprops  =dict(marker="o", color="#d29922",
+                                                 markersize=3, alpha=0.5))
+                    ax.set_xlabel(column, color="#8b949e", fontsize=8)
+                    ax.tick_params(colors="#8b949e", labelsize=7)
+                    ax.set_yticks([])
+                    for s in ax.spines.values(): s.set_visible(False)
+                    ax.xaxis.grid(True, color="#161b22", linewidth=0.5)
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    download_chart(fig, key="box_download")
+                    plt.close()
+
+                st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
+
+                # ── OUTLIER DETECTION ──
+                st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Outlier Detection (IQR Method)</p>', unsafe_allow_html=True)
+
+                q1, q3  = float(df[column].quantile(0.25)), float(df[column].quantile(0.75))
+                iqr     = q3 - q1
+                lower   = q1 - 1.5 * iqr
+                upper   = q3 + 1.5 * iqr
+
+                outlier_mask = (df[column].astype(float) < lower) | (df[column].astype(float) > upper)
+                outlier_rows = df[outlier_mask]
+
+                oc1, oc2, oc3 = st.columns(3)
+                oc1.metric("Lower Bound",  round(lower, 3))
+                oc2.metric("Upper Bound",  round(upper, 3))
+                oc3.metric("Outlier Rows", len(outlier_rows))
+
+                if outlier_rows.empty:
+                    st.success("No outliers found in this column 🎉")
+                else:
+                    with st.expander(f"Preview {min(50, len(outlier_rows))} Outlier Rows"):
+                        st.dataframe(outlier_rows.head(50), use_container_width=True)
+                        if len(outlier_rows) > 50:
+                            st.caption(f"Showing 50 of {len(outlier_rows)} outlier rows.")
+
+            # ── CATEGORICAL ──
+            else:
+                vc = df[column].value_counts()
+
+                mode_val = df[column].mode()
+                if not mode_val.empty:
+                    most_frequent = mode_val[0]
+                    top_count     = vc.iloc[0]
+                else:
+                    most_frequent = "N/A"
+                    top_count     = 0
+
+                colE, colF = st.columns(2)
+                colE.metric("Most Frequent Value", str(most_frequent))
+                colF.metric("Top Value Count",     int(top_count))
+
+                st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
+
+                # ── Value Distribution ──
+                st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Value Distribution</p>', unsafe_allow_html=True)
+                vc_table = pd.DataFrame({
+                    "Value"      : vc.index,
+                    "Count"      : vc.values,
+                    "Percentage" : (vc.values / len(df) * 100).round(2)
+                })
+                vc_table["Percentage"] = vc_table["Percentage"].astype(str) + " %"
+                st.dataframe(vc_table, use_container_width=True)
+
+                st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
+
+                MAX_BARS  = 20
+                vc_plot   = vc.head(MAX_BARS)
+                truncated = len(vc) > MAX_BARS
+
+                chart_l, chart_r = st.columns(2)
+
+                with chart_l:
+                    title_text = f"Top {MAX_BARS} Values" if truncated else "Value Counts"
+                    st.markdown(f'<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.5rem;">{title_text}</p>', unsafe_allow_html=True)
+                    fig, ax = plt.subplots(figsize=(5, max(3, len(vc_plot) * 0.35)))
+                    fig.patch.set_facecolor("#0d1117")
+                    ax.set_facecolor("#0d1117")
+                    colors = ["#388bfd" if i == 0 else "#161b22"
+                              for i in range(len(vc_plot))]
+                    ax.barh(vc_plot.index[::-1], vc_plot.values[::-1],
+                            color=colors[::-1], edgecolor="none")
+                    ax.set_xlabel("Count", color="#8b949e", fontsize=8)
+                    ax.tick_params(colors="#8b949e", labelsize=7)
+                    for s in ax.spines.values(): s.set_visible(False)
+                    ax.xaxis.grid(True, color="#161b22", linewidth=0.5)
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    download_chart(fig, key="bar_download")
+                    plt.close()
+
+                with chart_r:
+                    if len(vc) <= 10:
+                        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.5rem;">Distribution</p>', unsafe_allow_html=True)
+                        pie_data = vc
+                    else:
+                        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.5rem;">Top 10 Share</p>', unsafe_allow_html=True)
+                        top10    = vc.head(10)
+                        other    = vc.iloc[10:].sum()
+                        pie_data = pd.concat([top10, pd.Series({"Other": other})])
+
+                    pie_colors = ["#388bfd","#58a6ff","#3fb950","#d29922",
+                                  "#f78166","#bc8cff","#79c0ff","#56d364",
+                                  "#e3b341","#ff7b72","#8b949e"]
+
+                    fig, ax = plt.subplots(figsize=(4, 4))
+                    fig.patch.set_facecolor("#0d1117")
+                    wedges, texts, autotexts = ax.pie(
+                        pie_data.values,
+                        labels=pie_data.index,
+                        colors=pie_colors[:len(pie_data)],
+                        autopct="%1.1f%%", startangle=140,
+                        textprops={"color": "#8b949e", "fontsize": 7},
+                        wedgeprops={"edgecolor": "#0d1117", "linewidth": 1.5}
+                    )
+                    for at in autotexts:
+                        at.set_color("#f0f6fc")
+                        at.set_fontsize(7)
+                    ax.set_facecolor("#0d1117")
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    download_chart(fig, key="pie_download")
+                    plt.close()
 
 
 
@@ -1070,36 +1087,39 @@ if file is not None:
         st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Rename a Column</p>', unsafe_allow_html=True)
 
         df = st.session_state.df
-        rn1, rn2, rn3 = st.columns([2, 2, 1])
 
-        with rn1:
-            rename_col = st.selectbox(
-                "Select Column",
-                df.columns.tolist(),
-                key="rename_col"
-            )
-        with rn2:
-            new_name = st.text_input(
-                "New Name",
-                placeholder="Enter new column name",
-                key="rename_new"
-            )
-        with rn3:
-            st.markdown("<br>", unsafe_allow_html=True)
-            rename_btn = st.button("Rename", key="rename_btn")
+        if len(df.columns) == 0:
+            st.warning("No columns remaining to rename. Reset the dataset first. ❌")
+        else:
+            rn1, rn2, rn3 = st.columns([2, 2, 1])
+            with rn1:
+                rename_col = st.selectbox(
+                    "Select Column",
+                    df.columns.tolist(),
+                    key="rename_col"
+                )
+            with rn2:
+                new_name = st.text_input(
+                    "New Name",
+                    placeholder="Enter new column name",
+                    key="rename_new"
+                )
+            with rn3:
+                st.markdown("<br>", unsafe_allow_html=True)
+                rename_btn = st.button("Rename", key="rename_btn")
 
-        if rename_btn:
-            if not new_name.strip():
-                st.error("New name cannot be empty ❌")
-            elif new_name.strip() in df.columns and new_name.strip() != rename_col:
-                st.error(f"Column '{new_name}' already exists ❌")
-            else:
-                if "df_history" not in st.session_state:
-                    st.session_state["df_history"] = []
-                st.session_state["df_history"].append(st.session_state.df.copy())
-                st.session_state.df = st.session_state.df.rename(columns={rename_col: new_name.strip()})
-                st.session_state["last_action"] = f"'{rename_col}' renamed to '{new_name.strip()}'"
-                st.rerun()
+            if rename_btn:
+                if not new_name.strip():
+                    st.error("New name cannot be empty ❌")
+                elif new_name.strip() in df.columns and new_name.strip() != rename_col:
+                    st.error(f"Column '{new_name}' already exists ❌")
+                else:
+                    if "df_history" not in st.session_state:
+                        st.session_state["df_history"] = []
+                    st.session_state["df_history"].append(st.session_state.df.copy())
+                    st.session_state.df = st.session_state.df.rename(columns={rename_col: new_name.strip()})
+                    st.session_state["last_action"] = f"'{rename_col}' renamed to '{new_name.strip()}'"
+                    st.rerun()
 
         st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
 
@@ -1107,30 +1127,33 @@ if file is not None:
         st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Delete a Column</p>', unsafe_allow_html=True)
 
         df = st.session_state.df
-        col1, col2 = st.columns([3, 1])
 
-        with col1:
-            del_col = st.selectbox(
-                "Select column to delete",
-                df.columns.tolist(),
-                key="fill_del_col"
-            )
-        with col2:
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("Delete Column", key="fill_del_btn"):
-                if "df_history" not in st.session_state:
-                    st.session_state["df_history"] = []
-                st.session_state["df_history"].append(st.session_state.df.copy())
-                st.session_state.df = st.session_state.df.drop(columns=[del_col])
-                st.session_state["last_action"] = f"'{del_col}' column deleted"
-                st.rerun()
+        if len(df.columns) == 0:
+            st.warning("No columns remaining to delete. Reset the dataset first. ❌")
+        else:
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                del_col = st.selectbox(
+                    "Select column to delete",
+                    df.columns.tolist(),
+                    key="fill_del_col"
+                )
+            with col2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("Delete Column", key="fill_del_btn"):
+                    if "df_history" not in st.session_state:
+                        st.session_state["df_history"] = []
+                    st.session_state["df_history"].append(st.session_state.df.copy())
+                    st.session_state.df = st.session_state.df.drop(columns=[del_col])
+                    st.session_state["last_action"] = f"'{del_col}' column deleted"
+                    st.rerun()
 
         st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
- 
+
         # ── Undo / Reset ──
         st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Undo / Reset</p>', unsafe_allow_html=True)
 
-        history  = st.session_state.get("df_history", [])
+        history = st.session_state.get("df_history", [])
         undo_col, reset_col = st.columns(2)
 
         with undo_col:
@@ -1154,7 +1177,6 @@ if file is not None:
 
         # ── Download ──
         st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Download Cleaned Dataset</p>', unsafe_allow_html=True)
-
         csv = st.session_state.df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="Download CSV",
@@ -1162,7 +1184,6 @@ if file is not None:
             file_name="cleaned_data.csv",
             mime="text/csv"
         )
-
 
 
 # ---------- Duplicated Values ----------
