@@ -16,7 +16,7 @@ A powerful, dark-themed **Exploratory Data Analysis (EDA)** and **Data Cleaning*
 - **Data Health Score** — Scores dataset quality out of 100 based on missing values, duplicates, and outliers
 - **Outlier Detection** using IQR method — Lower/Upper bounds, count & percentage per column
 
-### 🔍 Column Analyzer Tab
+### 🔍 Column Analyzer Tab 
 - Per-column deep dive — Data type, missing %, unique values
 - **Numeric columns:** Mean, Median, Std Dev, Min, Max, Skewness, Kurtosis
 - **Skewness & Kurtosis interpretation** — Automatically labels distribution shape (Symmetric, Right Skewed, Leptokurtic, etc.)
