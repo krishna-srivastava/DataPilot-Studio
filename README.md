@@ -45,7 +45,7 @@ A powerful, dark-themed **Exploratory Data Analysis (EDA)** and **Data Cleaning*
 - **Delete columns**
 - **Undo** — Step-by-step undo for every action
 - Reset to original dataset
-- Download cleaned CSV
+- Download cleaned CSV 
 
 ### 🗂️ Duplicate Rows Tab
 - Check duplicates — All columns or specific column
@@ -96,7 +96,7 @@ streamlit run app.py
 
 ---
 
-## 🙋‍♂️ Author
+## 🙋‍♂️ Author 
 
 **Krishna Srivastava**  
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?style=flat&logo=linkedin)](https://linkedin.com/in/krishna-srivastava-b402a1323)
