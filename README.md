@@ -1,4 +1,4 @@
-# 🛸 DataPilot Studio
+# 🛸 DataPilot Studio 
 
 > **Upload CSV → Explore Data → Generate Insights**
 
