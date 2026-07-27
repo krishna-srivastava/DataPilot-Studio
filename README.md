@@ -89,7 +89,7 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
----
+---      
 
 ## App Preview:
 ![DataPilot Studio Screenshot](app_screenshot.png)
