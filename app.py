@@ -440,7 +440,7 @@ if file is not None:
     # ================= TABS =================
     eda_tab1, eda_tab2, eda_tab3, eda_tab4, eda_tab5, eda_tab6 = st.tabs([
         "Overview", "Column Analyzer", "Correlation",
-        "Visualization", "Data Cleaning", "Duplicate Rows"
+        "Data Cleaning", "Duplicate Rows", "Visualization"
     ])
 
 
@@ -889,416 +889,182 @@ if file is not None:
                     f"(20 total with the target) to keep the heatmap readable. Deselect / reselect manually for a different set."
                 )
 
+            # -- Guard clauses now block only the rest of THIS tab's content,
+            #    not the whole script. Using st.stop() here previously killed
+            #    every tab defined after eda_tab3 whenever this tab was in an
+            #    empty/invalid selection state. --
             if len(selected_others) > 19:
                 banner("err", f"Too many columns selected ({len(selected_others) + 1} with target). Please keep it to 20 total -- deselect {len(selected_others) - 19} column(s).")
-                st.stop()
-
-            if not selected_others:
+            elif not selected_others:
                 banner("warn", "Select at least one column to compare against the target.")
-                st.stop()
+            else:
+                divider()
 
-            divider()
+                corr_cols = [target_col] + selected_others
+                corr_df   = df[corr_cols].apply(pd.to_numeric, errors="coerce")
+                corr      = corr_df.corr()
+                num_cols  = len(corr_cols)
 
-            corr_cols = [target_col] + selected_others
-            corr_df   = df[corr_cols].apply(pd.to_numeric, errors="coerce")
-            corr      = corr_df.corr()
-            num_cols  = len(corr_cols)
+                st.markdown("""
+                <div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;
+                            padding:0.8rem 1.1rem;margin-bottom:1rem;
+                            font-family:'Space Mono',monospace;font-size:0.72rem;color:#8b949e;">
+                    <span style="color:#f0f6fc;font-weight:700;">Correlation Guide &nbsp;·&nbsp;</span>
+                    <span style="color:#3fb950;">+1 = Perfect Positive</span> &nbsp;·&nbsp;
+                    <span style="color:#d29922;">0 = No Relation</span> &nbsp;·&nbsp;
+                    <span style="color:#f85149;">-1 = Perfect Negative</span>
+                    <br><span style="font-size:0.65rem;color:#8b949e;margin-top:0.3rem;display:block;">
+                        |0.8–1.0| Strong &nbsp;·&nbsp; |0.5–0.8| Moderate &nbsp;·&nbsp; |0.2–0.5| Weak &nbsp;·&nbsp; |0.0–0.2| Very Weak
+                    </span>
+                </div>
+                """, unsafe_allow_html=True)
 
-            st.markdown("""
-            <div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;
-                        padding:0.8rem 1.1rem;margin-bottom:1rem;
-                        font-family:'Space Mono',monospace;font-size:0.72rem;color:#8b949e;">
-                <span style="color:#f0f6fc;font-weight:700;">Correlation Guide &nbsp;·&nbsp;</span>
-                <span style="color:#3fb950;">+1 = Perfect Positive</span> &nbsp;·&nbsp;
-                <span style="color:#d29922;">0 = No Relation</span> &nbsp;·&nbsp;
-                <span style="color:#f85149;">-1 = Perfect Negative</span>
-                <br><span style="font-size:0.65rem;color:#8b949e;margin-top:0.3rem;display:block;">
-                    |0.8–1.0| Strong &nbsp;·&nbsp; |0.5–0.8| Moderate &nbsp;·&nbsp; |0.2–0.5| Weak &nbsp;·&nbsp; |0.0–0.2| Very Weak
-                </span>
-            </div>
-            """, unsafe_allow_html=True)
+                # ── Table: target's correlation with each selected column ──
+                eyebrow(f"Correlation with \"{target_col}\"")
 
-            # ── Table: target's correlation with each selected column ──
-            eyebrow(f"Correlation with \"{target_col}\"")
+                target_corr = corr[target_col].drop(target_col)
 
-            target_corr = corr[target_col].drop(target_col)
-
-            def get_strength(val):
-                if pd.isna(val):
-                    return "N/A"
-                abs_val   = abs(val)
-                direction = "Positive" if val > 0 else "Negative"
-                if abs_val >= 0.8:
-                    return f"Strong {direction}"
-                elif abs_val >= 0.5:
-                    return f"Moderate {direction}"
-                elif abs_val >= 0.2:
-                    return f"Weak {direction}"
-                else:
-                    return "Very Weak"
-
-            target_table = pd.DataFrame({
-                "Column": target_corr.index,
-                "Correlation": target_corr.values.round(4),
-            })
-            target_table["Strength"] = target_table["Correlation"].apply(get_strength)
-            target_table = target_table.sort_values("Correlation", key=lambda s: s.abs(), ascending=False).reset_index(drop=True)
-
-            def color_corr(val):
-                if pd.isna(val):
-                    return "background-color:#0d1117;color:#4a5260;"
-
-                abs_val = abs(val)
-                # ── Positive correlation → Blue ──
-                if val > 0:
+                def get_strength(val):
+                    if pd.isna(val):
+                        return "N/A"
+                    abs_val   = abs(val)
+                    direction = "Positive" if val > 0 else "Negative"
                     if abs_val >= 0.8:
-                        bg = "#0c2340"
-                        fg = "#60a5fa"
+                        return f"Strong {direction}"
                     elif abs_val >= 0.5:
-                        bg = "#0a1a2e"
-                        fg = "#79c0ff"
+                        return f"Moderate {direction}"
                     elif abs_val >= 0.2:
-                        bg = "#0d1826"
-                        fg = "#5b9ee8"
+                        return f"Weak {direction}"
                     else:
-                        bg = "#0d1117"
-                        fg = "#4a7fb5"
+                        return "Very Weak"
 
-                # ── Negative correlation → Red ──
-                elif val < 0:
-                    if abs_val >= 0.8:
-                        bg = "#3a0d16"
-                        fg = "#ff6b7a"
-                    elif abs_val >= 0.5:
-                        bg = "#2b0b12"
-                        fg = "#f78166"
-                    elif abs_val >= 0.2:
-                        bg = "#1d0d12"
-                        fg = "#e56b6f"
-                    else:
-                        bg = "#0d1117"
-                        fg = "#a85b63"
+                target_table = pd.DataFrame({
+                    "Column": target_corr.index,
+                    "Correlation": target_corr.values.round(4),
+                })
+                target_table["Strength"] = target_table["Correlation"].apply(get_strength)
+                target_table = target_table.sort_values("Correlation", key=lambda s: s.abs(), ascending=False).reset_index(drop=True)
 
-                # ── Exactly zero ──
-                else:
-                    bg = "#0d1117"
-                    fg = "#4a5260"
+                def color_corr(val):
+                    if pd.isna(val):
+                        return "background-color:#0d1117;color:#4a5260;"
 
-                return (
-                    f"background-color:{bg};"
-                    f"color:{fg};"
-                    f"font-weight:500;"
-                )
-
-            styled_target_table = target_table.style.map(color_corr, subset=["Correlation"])
-            st.dataframe(styled_target_table, use_container_width=True, hide_index=True)
-
-            divider()
-
-            # ── Full matrix table ──
-            eyebrow("Full Correlation Matrix")
-            styled_matrix = corr.round(3).style.map(color_corr)
-            st.dataframe(styled_matrix, use_container_width=True)
-
-            divider()
-
-            # ── Heatmap diagram ──
-            eyebrow("Correlation Heatmap")
-            annot = num_cols <= 15
-
-            from matplotlib.colors import LinearSegmentedColormap
-            horizon_cmap = LinearSegmentedColormap.from_list(
-                "horizon_corr",
-                [
-                    "#0b1f3a",   # strong negative → deep navy
-                    "#174ea6",   # negative → blue
-                    "#111827",   # zero → dark slate
-                    "#2563eb",   # positive → blue
-                    "#7dd3fc"    # strong positive → light cyan
-                ],
-                N=256
-            )
-
-            fig4, ax4 = plt.subplots(
-                figsize=(max(6, num_cols * 0.6), max(5, num_cols * 0.5))
-            )
-
-            # ── Dark theme ──
-            fig4.patch.set_facecolor("#0d1117")
-            ax4.set_facecolor("#0d1117")
-            sns.heatmap(corr,annot=False,cmap=horizon_cmap,center=0,vmin=-1,vmax=1,ax=ax4,linewidths=0.7,linecolor="#0d1117",square=True,cbar_kws={"shrink": 0.80,"pad": 0.03})
-
-            # ── Custom correlation values ──
-            if annot:
-                for i in range(corr.shape[0]):
-                    for j in range(corr.shape[1]):
-                        value = corr.iloc[i, j]
-
-                        if abs(value) >= 0.55:
-                            text_color = "#ffffff"
+                    abs_val = abs(val)
+                    if val > 0:
+                        if abs_val >= 0.8:
+                            bg, fg = "#0c2340", "#60a5fa"
+                        elif abs_val >= 0.5:
+                            bg, fg = "#0a1a2e", "#79c0ff"
+                        elif abs_val >= 0.2:
+                            bg, fg = "#0d1826", "#5b9ee8"
                         else:
-                            text_color = "#c7d0d9"
+                            bg, fg = "#0d1117", "#4a7fb5"
+                    elif val < 0:
+                        if abs_val >= 0.8:
+                            bg, fg = "#3a0d16", "#ff6b7a"
+                        elif abs_val >= 0.5:
+                            bg, fg = "#2b0b12", "#f78166"
+                        elif abs_val >= 0.2:
+                            bg, fg = "#1d0d12", "#e56b6f"
+                        else:
+                            bg, fg = "#0d1117", "#a85b63"
+                    else:
+                        bg, fg = "#0d1117", "#4a5260"
 
-                        ax4.text(j + 0.5,i + 0.5,f"{value:.2f}",ha="center",va="center",fontsize=8,fontweight="bold",color=text_color)
+                    return f"background-color:{bg};color:{fg};font-weight:500;"
 
-            # ── Axis labels ──
-            ax4.tick_params(colors="#8b949e",labelsize=7,length=0)
-            ax4.set_xticklabels(ax4.get_xticklabels(),rotation=45,ha="right")
-            ax4.set_yticklabels(ax4.get_yticklabels(),rotation=0)
+                styled_target_table = target_table.style.map(color_corr, subset=["Correlation"])
+                st.dataframe(styled_target_table, use_container_width=True, hide_index=True)
 
-            # ── Highlight target column + row ──
-            target_idx = list(corr.columns).index(target_col)
-            target_color = "#60a5fa"
-            ax4.add_patch(
-                plt.Rectangle((target_idx, 0),1,num_cols,fill=False,edgecolor=target_color,linewidth=2.2
+                divider()
+
+                # ── Full matrix table ──
+                eyebrow("Full Correlation Matrix")
+                styled_matrix = corr.round(3).style.map(color_corr)
+                st.dataframe(styled_matrix, use_container_width=True)
+
+                divider()
+
+                # ── Heatmap diagram ──
+                eyebrow("Correlation Heatmap")
+                annot = num_cols <= 15
+
+                from matplotlib.colors import LinearSegmentedColormap
+                horizon_cmap = LinearSegmentedColormap.from_list(
+                    "horizon_corr",
+                    ["#0b1f3a", "#174ea6", "#111827", "#2563eb", "#7dd3fc"],
+                    N=256
                 )
-            )
-            ax4.add_patch(
-                plt.Rectangle((0, target_idx),num_cols,1,fill=False,edgecolor=target_color,linewidth=2.2
-                )
-            )
 
-            cbar = ax4.collections[0].colorbar
-            cbar.ax.tick_params(colors="#8b949e",labelsize=7,length=0)
-            cbar.outline.set_edgecolor("#263241")
-            cbar.outline.set_linewidth(0.8)
+                fig4, ax4 = plt.subplots(figsize=(max(6, num_cols * 0.6), max(5, num_cols * 0.5)))
+                fig4.patch.set_facecolor("#0d1117")
+                ax4.set_facecolor("#0d1117")
+                sns.heatmap(corr, annot=False, cmap=horizon_cmap, center=0, vmin=-1, vmax=1, ax=ax4,
+                            linewidths=0.7, linecolor="#0d1117", square=True, cbar_kws={"shrink": 0.80, "pad": 0.03})
 
-            for spine in ax4.spines.values():
-                spine.set_visible(False)
+                if annot:
+                    for i in range(corr.shape[0]):
+                        for j in range(corr.shape[1]):
+                            value = corr.iloc[i, j]
+                            text_color = "#ffffff" if abs(value) >= 0.55 else "#c7d0d9"
+                            ax4.text(j + 0.5, i + 0.5, f"{value:.2f}", ha="center", va="center",
+                                      fontsize=8, fontweight="bold", color=text_color)
 
-            plt.tight_layout()
-            st.pyplot(fig4)
-            download_chart(
-                fig4,
-                "corr_heatmap_download"
-            )
-            plt.close(fig4)
+                ax4.tick_params(colors="#8b949e", labelsize=7, length=0)
+                ax4.set_xticklabels(ax4.get_xticklabels(), rotation=45, ha="right")
+                ax4.set_yticklabels(ax4.get_yticklabels(), rotation=0)
+
+                target_idx = list(corr.columns).index(target_col)
+                target_color = "#60a5fa"
+                ax4.add_patch(plt.Rectangle((target_idx, 0), 1, num_cols, fill=False, edgecolor=target_color, linewidth=2.2))
+                ax4.add_patch(plt.Rectangle((0, target_idx), num_cols, 1, fill=False, edgecolor=target_color, linewidth=2.2))
+
+                cbar = ax4.collections[0].colorbar
+                cbar.ax.tick_params(colors="#8b949e", labelsize=7, length=0)
+                cbar.outline.set_edgecolor("#263241")
+                cbar.outline.set_linewidth(0.8)
+
+                for spine in ax4.spines.values():
+                    spine.set_visible(False)
+
+                plt.tight_layout()
+                st.pyplot(fig4)
+                download_chart(fig4, "corr_heatmap_download")
+                plt.close(fig4)
 
 
-# ---------- VISUALIZATION ----------
+
+# ---------- DATA CLEANING ----------
     with eda_tab4:
-
-        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Chart Settings</p>', unsafe_allow_html=True)
-
-        chart_type = st.selectbox(
-            "Select Chart Type",
-            ["Histogram", "Box Plot", "Bar Chart", "Scatter Plot",
-             "Line Chart", "Violin Plot", "Pie Chart"],
-            key="chart_type"
-        )
-
-        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-        cat_cols     = df.select_dtypes(include="object").columns.tolist()
-        all_cols     = df.columns.tolist()
-
-        if chart_type in ["Histogram", "Box Plot", "Violin Plot"]:
-            x_options = numeric_cols if numeric_cols else all_cols
-            st.caption("ℹ️ Only numeric columns shown for this chart type.")
-        elif chart_type in ["Bar Chart", "Pie Chart"]:
-            x_options = cat_cols if cat_cols else all_cols
-            st.caption("ℹ️ Only categorical columns shown for this chart type.")
-        else:
-            x_options = all_cols
-
-        x_col   = st.selectbox("Select X-axis", x_options, key="x_col")
-        y_col   = None
-        hue_col = None
-
-        if chart_type in ["Scatter Plot", "Line Chart"]:
-            y_options = numeric_cols if numeric_cols else all_cols
-            y_col = st.selectbox("Select Y-axis", y_options, key="y_col")
-
-        if chart_type == "Scatter Plot" and cat_cols:
-            hue_options = ["None"] + cat_cols
-            hue_sel     = st.selectbox("Color by (optional)", hue_options, key="hue_col")
-            hue_col     = None if hue_sel == "None" else hue_sel
-
-        if len(df) > 10000:
-            st.caption(f"⚡ Large dataset ({len(df):,} rows) — chart will use 10,000 random samples.")
-
-        show_chart = st.button("Show Chart", key="show_chart_btn")
-
-        def style_ax(fig, ax):
-            fig.patch.set_facecolor("#0d1117")
-            ax.set_facecolor("#0d1117")
-            ax.tick_params(colors="#8b949e", labelsize=7)
-            ax.set_xlabel(ax.get_xlabel(), color="#8b949e", fontsize=8)
-            ax.set_ylabel(ax.get_ylabel(), color="#8b949e", fontsize=8)
-            for s in ax.spines.values(): s.set_visible(False)
-            ax.xaxis.grid(True, color="#161b22", linewidth=0.5)
-            ax.yaxis.grid(True, color="#161b22", linewidth=0.5)
-
-        if show_chart:
-            st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1rem 0;'>", unsafe_allow_html=True)
-            st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Chart Output</p>', unsafe_allow_html=True)
-
-            with st.spinner("Generating chart... ⏳"):
-                try:
-                    plot_df = df.sample(10000, random_state=42) if len(df) > 10000 else df
-
-                    if chart_type == "Histogram":
-                        fig, ax = plt.subplots(figsize=(7, 4))
-                        sns.histplot(plot_df[x_col].dropna(), bins=30,
-                                     color="#388bfd", alpha=0.8, ax=ax)
-                        ax.set_xlabel(x_col)
-                        ax.set_ylabel("Count")
-                        style_ax(fig, ax)
-                        plt.tight_layout()
-                        st.pyplot(fig)
-                        download_chart(fig, "viz_histogram_download")
-                        plt.close(fig)
-
-                    elif chart_type == "Box Plot":
-                        fig, ax = plt.subplots(figsize=(7, 4))
-                        ax.boxplot(plot_df[x_col].dropna(), vert=False,
-                                   patch_artist=True, widths=0.5,
-                                   boxprops    =dict(facecolor="#161b22", color="#388bfd"),
-                                   medianprops =dict(color="#f78166", linewidth=2),
-                                   whiskerprops=dict(color="#388bfd"),
-                                   capprops    =dict(color="#388bfd"),
-                                   flierprops  =dict(marker="o", color="#d29922",
-                                                     markersize=3, alpha=0.5))
-                        ax.set_xlabel(x_col)
-                        ax.set_yticks([])
-                        style_ax(fig, ax)
-                        plt.tight_layout()
-                        st.pyplot(fig)
-                        download_chart(fig, "viz_box_download")
-                        plt.close(fig)
-
-                    elif chart_type == "Bar Chart":
-                        counts = plot_df[x_col].value_counts().head(15)
-                        fig, ax = plt.subplots(figsize=(7, 4))
-                        colors  = ["#388bfd" if i == 0 else "#161b22"
-                                   for i in range(len(counts))]
-                        ax.barh(counts.index.astype(str)[::-1],
-                                counts.values[::-1],
-                                color=colors[::-1], edgecolor="none")
-                        ax.set_xlabel("Count")
-                        ax.set_ylabel(x_col)
-                        style_ax(fig, ax)
-                        plt.tight_layout()
-                        st.pyplot(fig)
-                        download_chart(fig, "viz_bar_download")
-                        plt.close(fig)
-
-                    elif chart_type == "Scatter Plot":
-                        if x_col not in numeric_cols or y_col not in numeric_cols:
-                            st.error("❌ Scatter Plot requires numeric X and Y columns.")
-                        else:
-                            cols_needed = [x_col, y_col] + ([hue_col] if hue_col else [])
-                            scatter_df  = plot_df[cols_needed].dropna()
-
-                            if scatter_df.empty:
-                                st.warning("⚠ No valid data after removing missing values.")
-                            else:
-                                fig, ax = plt.subplots(figsize=(7, 4))
-                                if hue_col:
-                                    categories = scatter_df[hue_col].unique()
-                                    palette    = ["#388bfd","#3fb950","#f78166",
-                                                  "#d29922","#bc8cff","#79c0ff"]
-                                    for i, cat in enumerate(categories):
-                                        mask = scatter_df[hue_col] == cat
-                                        ax.scatter(scatter_df.loc[mask, x_col],
-                                                   scatter_df.loc[mask, y_col],
-                                                   color=palette[i % len(palette)],
-                                                   label=str(cat), alpha=0.6, s=18,
-                                                   edgecolors="none")
-                                    ax.legend(fontsize=7, labelcolor="#8b949e",
-                                              facecolor="#0d1117", edgecolor="#21262d")
-                                else:
-                                    ax.scatter(scatter_df[x_col], scatter_df[y_col],
-                                               color="#388bfd", alpha=0.5, s=18,
-                                               edgecolors="none")
-                                ax.set_xlabel(x_col)
-                                ax.set_ylabel(y_col)
-                                style_ax(fig, ax)
-                                plt.tight_layout()
-                                st.pyplot(fig)
-                                download_chart(fig, "viz_scatter_download")
-                                plt.close(fig)
-
-                    elif chart_type == "Line Chart":
-                        if x_col not in numeric_cols or y_col not in numeric_cols:
-                            st.error("❌ Line Chart requires numeric X and Y columns.")
-                        else:
-                            line_df = plot_df[[x_col, y_col]].dropna().sort_values(x_col)
-                            fig, ax = plt.subplots(figsize=(7, 4))
-                            ax.plot(line_df[x_col], line_df[y_col],
-                                    color="#388bfd", linewidth=1.5)
-                            ax.set_xlabel(x_col)
-                            ax.set_ylabel(y_col)
-                            style_ax(fig, ax)
-                            plt.tight_layout()
-                            st.pyplot(fig)
-                            download_chart(fig, "viz_line_download")
-                            plt.close(fig)
-
-                    elif chart_type == "Violin Plot":
-                        fig, ax = plt.subplots(figsize=(7, 4))
-                        sns.violinplot(x=plot_df[x_col].dropna(), ax=ax,
-                                       color="#388bfd", linecolor="#161b22",
-                                       linewidth=0.8, inner="box")
-                        ax.set_xlabel(x_col)
-                        style_ax(fig, ax)
-                        plt.tight_layout()
-                        st.pyplot(fig)
-                        download_chart(fig, "viz_violin_download")
-                        plt.close(fig)
-
-                    elif chart_type == "Pie Chart":
-                        counts = plot_df[x_col].value_counts().head(8)
-                        pie_colors = ["#388bfd","#3fb950","#f78166","#d29922",
-                                      "#bc8cff","#79c0ff","#56d364","#e3b341"]
-                        fig, ax = plt.subplots(figsize=(5, 5))
-                        fig.patch.set_facecolor("#0d1117")
-                        wedges, texts, autotexts = ax.pie(
-                            counts.values,
-                            labels=counts.index.astype(str),
-                            colors=pie_colors[:len(counts)],
-                            autopct="%1.1f%%", startangle=140,
-                            textprops={"color": "#8b949e", "fontsize": 7},
-                            wedgeprops={"edgecolor": "#0d1117", "linewidth": 1.5}
-                        )
-                        for at in autotexts:
-                            at.set_color("#f0f6fc")
-                            at.set_fontsize(7)
-                        ax.set_facecolor("#0d1117")
-                        plt.tight_layout()
-                        st.pyplot(fig)
-                        download_chart(fig, "viz_pie_download")
-                        plt.close(fig)
-
-                except Exception as e:
-                    st.error(f"❌ Error generating chart: {e}")
-
-
-
-# ---------- Missing Values ----------
-    with eda_tab5:
         df = st.session_state.df
 
+        def push_cleaning_history():
+            history = st.session_state.setdefault("cleaning_history", [])
+            history.append(st.session_state.df.copy())
+            if len(history) > 20:
+                history.pop(0)
+
         # ── Missing Values Table ──
-        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Missing Values Table</p>', unsafe_allow_html=True)
+        eyebrow("Missing Values Table")
 
         missing = df.isnull().sum()
         missing = missing[missing > 0]
 
         if missing.empty:
-            st.success("No missing values in dataset 🎉")
+            banner("ok", "No missing values in this dataset.")
         else:
             missing_df = pd.DataFrame({
                 "Column": missing.index,
                 "Missing Values": missing.values
-            }).sort_values(by="Missing Values", ascending=False)
+            }).sort_values(by="Missing Values", ascending=False).reset_index(drop=True)
 
             st.caption("Only columns with missing values are shown below")
             st.dataframe(missing_df, use_container_width=True)
 
-            st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+            divider()
 
             # ── Fill Missing Values ──
-            st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Fill Missing Values</p>', unsafe_allow_html=True)
+            eyebrow("Fill Missing Values")
 
             col1, col2 = st.columns(2)
             with col1:
@@ -1309,17 +1075,10 @@ if file is not None:
                 )
 
             is_numeric = pd.api.types.is_numeric_dtype(df[selected_col])
-            if is_numeric:
-                method_options = ["Mean", "Median", "Mode", "Custom Value"]
-            else:
-                method_options = ["Mode", "Custom Value"]
+            method_options = ["Mean", "Median", "Mode", "Custom Value"] if is_numeric else ["Mode", "Custom Value"]
 
             with col2:
-                method = st.selectbox(
-                    "Select Method",
-                    method_options,
-                    key="method_select"
-                )
+                method = st.selectbox("Select Method", method_options, key="method_select")
 
             custom_value = None
             if method == "Custom Value":
@@ -1330,31 +1089,30 @@ if file is not None:
                 )
 
             if st.button("Fill Missing", key="fill_btn"):
+                value = None
                 if method == "Mean":
                     value = df[selected_col].mean()
                 elif method == "Median":
                     value = df[selected_col].median()
                 elif method == "Mode":
                     mode_val = df[selected_col].mode()
-                    value = mode_val[0] if not mode_val.empty else None
-                else:
-                    if custom_value == "" or custom_value is None:
-                        st.warning("Please enter a custom value ❌")
-                        value = None
+                    if mode_val.empty:
+                        banner("warn", f"<strong>{selected_col}</strong> has no non-null values to compute a mode from.")
                     else:
-                        if is_numeric:
-                            try:
-                                value = float(custom_value)
-                            except ValueError:
-                                st.error("Numeric column — please enter a number ❌")
-                                value = None
-                        else:
-                            value = custom_value
+                        value = mode_val.iloc[0]
+                else:
+                    if not custom_value:
+                        banner("warn", "Please enter a custom value.")
+                    elif is_numeric:
+                        try:
+                            value = float(custom_value)
+                        except ValueError:
+                            banner("err", "This is a numeric column -- please enter a number.")
+                    else:
+                        value = custom_value
 
                 if value is not None:
-                    if "df_history" not in st.session_state:
-                        st.session_state["df_history"] = []
-                    st.session_state["df_history"].append(st.session_state.df.copy())
+                    push_cleaning_history()
                     df[selected_col] = df[selected_col].fillna(value)
                     st.session_state.df = df
                     st.session_state["last_action"] = f"'{selected_col}' filled using {method}"
@@ -1362,120 +1120,124 @@ if file is not None:
 
         # ── Success message ──
         if "last_action" in st.session_state:
-            st.success(st.session_state["last_action"] + " ✅")
+            banner("ok", st.session_state["last_action"])
             del st.session_state["last_action"]
 
-        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+        divider()
 
         # ── Rename Column ──
-        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Rename a Column</p>', unsafe_allow_html=True)
+        eyebrow("Rename a Column")
 
         df = st.session_state.df
 
         if len(df.columns) == 0:
-            st.warning("No columns remaining to rename. Reset the dataset first. ❌")
+            banner("warn", "No columns remaining to rename. Reset the dataset first.")
         else:
             rn1, rn2, rn3 = st.columns([2, 2, 1])
             with rn1:
-                rename_col = st.selectbox(
-                    "Select Column",
-                    df.columns.tolist(),
-                    key="rename_col"
-                )
+                rename_col = st.selectbox("Select Column", df.columns.tolist(), key="rename_col")
             with rn2:
-                new_name = st.text_input(
-                    "New Name",
-                    placeholder="Enter new column name",
-                    key="rename_new"
-                )
+                new_name = st.text_input("New Name", placeholder="Enter new column name", key="rename_new")
             with rn3:
-                st.markdown("<br>", unsafe_allow_html=True)
-                rename_btn = st.button("Rename", key="rename_btn")
+                st.markdown('<div style="height:1.7rem;"></div>', unsafe_allow_html=True)
+                rename_btn = st.button("Rename", key="rename_btn", use_container_width=True)
 
             if rename_btn:
-                if not new_name.strip():
-                    st.error("New name cannot be empty ❌")
-                elif new_name.strip() in df.columns and new_name.strip() != rename_col:
-                    st.error(f"Column '{new_name}' already exists ❌")
+                cleaned_name = new_name.strip()
+                if not cleaned_name:
+                    banner("err", "New name cannot be empty.")
+                elif cleaned_name in df.columns and cleaned_name != rename_col:
+                    banner("err", f"Column '{cleaned_name}' already exists.")
                 else:
-                    if "df_history" not in st.session_state:
-                        st.session_state["df_history"] = []
-                    st.session_state["df_history"].append(st.session_state.df.copy())
-                    st.session_state.df = st.session_state.df.rename(columns={rename_col: new_name.strip()})
-                    st.session_state["last_action"] = f"'{rename_col}' renamed to '{new_name.strip()}'"
+                    push_cleaning_history()
+                    st.session_state.df = st.session_state.df.rename(columns={rename_col: cleaned_name})
+                    st.session_state["last_action"] = f"'{rename_col}' renamed to '{cleaned_name}'"
                     st.rerun()
 
-        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+        divider()
 
         # ── Delete Column ──
-        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Delete a Column</p>', unsafe_allow_html=True)
+        eyebrow("Delete a Column")
 
         df = st.session_state.df
 
         if len(df.columns) == 0:
-            st.warning("No columns remaining to delete. Reset the dataset first. ❌")
+            banner("warn", "No columns remaining to delete. Reset the dataset first.")
+        elif len(df.columns) == 1:
+            banner("warn", f"Only one column (<strong>{df.columns[0]}</strong>) remains -- deleting it would leave an empty dataset, so this is disabled.")
         else:
             col1, col2 = st.columns([3, 1])
             with col1:
-                del_col = st.selectbox(
-                    "Select column to delete",
-                    df.columns.tolist(),
-                    key="fill_del_col"
-                )
+                del_col = st.selectbox("Select column to delete", df.columns.tolist(), key="fill_del_col")
             with col2:
-                st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("Delete Column", key="fill_del_btn"):
-                    if "df_history" not in st.session_state:
-                        st.session_state["df_history"] = []
-                    st.session_state["df_history"].append(st.session_state.df.copy())
+                st.markdown('<div style="height:1.7rem;"></div>', unsafe_allow_html=True)
+                if st.button("Delete Column", key="fill_del_btn", use_container_width=True):
+                    push_cleaning_history()
                     st.session_state.df = st.session_state.df.drop(columns=[del_col])
                     st.session_state["last_action"] = f"'{del_col}' column deleted"
                     st.rerun()
 
-        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+        divider()
 
         # ── Undo / Reset ──
-        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Undo / Reset</p>', unsafe_allow_html=True)
+        eyebrow("Undo / Reset", )
+        st.markdown(
+            '<p style="font-size:0.7rem;color:#8b949e;margin-top:-0.6rem;margin-bottom:0.8rem;">'
+            'Undo reverses your last fill / rename / delete action on this tab. Reset always restores the original uploaded file.</p>',
+            unsafe_allow_html=True
+        )
 
-        history = st.session_state.get("df_history", [])
+        cleaning_history = st.session_state.get("cleaning_history", [])
         undo_col, reset_col = st.columns(2)
 
         with undo_col:
             if st.button(
-                f"↩ Undo Last Action ({len(history)} steps)",
+                f"↩ Undo Last Action ({len(cleaning_history)} step{'s' if len(cleaning_history) != 1 else ''})",
                 key="undo_btn",
-                disabled=len(history) == 0
+                disabled=len(cleaning_history) == 0,
+                use_container_width=True
             ):
-                st.session_state.df = st.session_state["df_history"].pop()
+                st.session_state.df = st.session_state["cleaning_history"].pop()
                 st.session_state["last_action"] = "Last action undone"
                 st.rerun()
 
         with reset_col:
-            if st.button("🔄 Reset to Original Dataset", key="fill_reset_btn"):
+            if st.button("🔄 Reset to Original Dataset", key="fill_reset_btn", use_container_width=True):
                 st.session_state.df = st.session_state.original_df.copy()
-                st.session_state["df_history"] = []
+                st.session_state["cleaning_history"] = []
                 st.session_state["last_action"] = "Dataset reset to original"
                 st.rerun()
 
-        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+        divider()
 
         # ── Download ──
-        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Download Cleaned Dataset</p>', unsafe_allow_html=True)
+        eyebrow("Download Cleaned Dataset")
         csv = st.session_state.df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="Download CSV",
             data=csv,
             file_name="cleaned_data.csv",
-            mime="text/csv"
+            mime="text/csv",
+            key="cleaning_download"
         )
 
 
 
-# ---------- Duplicated Values ----------
-    with eda_tab6:
+# ---------- DUPLICATE ROWS ----------
+    with eda_tab5:
         df = st.session_state.df
 
+        def push_duplicate_history():
+            """Tab-scoped undo stack -- separate from Data Cleaning's cleaning_history,
+            so undo here only reverses duplicate-removal actions taken in this tab."""
+            history = st.session_state.setdefault("duplicate_history", [])
+            history.append(st.session_state.df.copy())
+            if len(history) > 20:
+                history.pop(0)
+
         # ── Check Mode ──
+        eyebrow("Check Duplicates")
+
         check_mode = st.radio(
             "Check duplicates based on:",
             ["All Columns", "Specific Column"],
@@ -1492,23 +1254,37 @@ if file is not None:
             )
             subset = [selected_col]
 
-        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+        divider()
 
         # ── Stats ──
         duplicate_count = int(df.duplicated(subset=subset).sum())
         total_rows      = len(df)
         dup_percent     = round((duplicate_count / total_rows) * 100, 2) if total_rows > 0 else 0
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total Rows",     f"{total_rows:,}")
-        col2.metric("Duplicate Rows", f"{duplicate_count:,}")
-        col3.metric("Duplicate %",    f"{dup_percent}%")
+        dup_cls = "yellow" if duplicate_count > 0 else "green"
+
+        st.markdown(f"""
+        <div class="stats-row">
+            <div class="stat-card" style="--accent:#388bfd">
+                <div class="stat-label">Total Rows</div>
+                <div class="stat-value blue">{total_rows:,}</div>
+            </div>
+            <div class="stat-card" style="--accent:{'#d29922' if duplicate_count > 0 else '#3fb950'}">
+                <div class="stat-label">Duplicate Rows</div>
+                <div class="stat-value {dup_cls}">{duplicate_count:,}</div>
+            </div>
+            <div class="stat-card" style="--accent:{'#d29922' if duplicate_count > 0 else '#3fb950'}">
+                <div class="stat-label">Duplicate %</div>
+                <div class="stat-value {dup_cls}">{dup_percent}%</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
         # ── Preview ──
         if duplicate_count == 0:
-            st.success("No duplicate rows found 🎉")
+            banner("ok", "No duplicate rows found.")
         else:
-            st.warning(f"⚠ {duplicate_count:,} duplicate rows found.")
+            banner("warn", f"{duplicate_count:,} duplicate rows found.")
             with st.expander("Preview Duplicate Rows"):
                 st.dataframe(
                     df[df.duplicated(subset=subset)].head(50),
@@ -1519,13 +1295,13 @@ if file is not None:
 
         # ── Message ──
         if "dup_msg" in st.session_state:
-            st.success(st.session_state["dup_msg"] + " ✅")
+            banner("ok", st.session_state["dup_msg"])
             del st.session_state["dup_msg"]
 
-        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+        divider()
 
         # ── Actions ──
-        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Actions</p>', unsafe_allow_html=True)
+        eyebrow("Actions")
 
         btn1, btn2 = st.columns(2)
 
@@ -1533,42 +1309,44 @@ if file is not None:
             if st.button(
                 "🗑 Delete All Duplicates",
                 key="delete_dup",
-                disabled=duplicate_count == 0
+                disabled=duplicate_count == 0,
+                use_container_width=True
             ):
-                if "df_history" not in st.session_state:
-                    st.session_state["df_history"] = []
-                st.session_state["df_history"].append(st.session_state.df.copy())
+                push_duplicate_history()
                 before = len(st.session_state.df)
-                st.session_state.df = st.session_state.df.drop_duplicates(
-                    subset=subset
-                ).reset_index(drop=True)
+                st.session_state.df = st.session_state.df.drop_duplicates(subset=subset).reset_index(drop=True)
                 after = len(st.session_state.df)
                 st.session_state["dup_msg"] = f"{before - after:,} duplicate rows removed"
                 st.rerun()
 
         with btn2:
-            if st.button("🔄 Reset to Original Dataset", key="reset_dup"):
+            if st.button("🔄 Reset to Original Dataset", key="reset_dup", use_container_width=True):
                 st.session_state.df = st.session_state.original_df.copy()
-                st.session_state["df_history"] = []
+                st.session_state["duplicate_history"] = []
                 st.session_state["dup_msg"] = "Dataset reset to original"
                 st.rerun()
 
         # ── Undo ──
-        history = st.session_state.get("df_history", [])
+        duplicate_history = st.session_state.get("duplicate_history", [])
+        st.markdown(
+            '<p style="font-size:0.7rem;color:#8b949e;margin-top:0.6rem;margin-bottom:0.5rem;">'
+            'Undo reverses your last delete-duplicates action on this tab. Reset always restores the original uploaded file.</p>',
+            unsafe_allow_html=True
+        )
         if st.button(
-            f"↩ Undo Last Action ({len(history)} steps)",
+            f"↩ Undo Last Action ({len(duplicate_history)} step{'s' if len(duplicate_history) != 1 else ''})",
             key="undo_dup_btn",
-            disabled=len(history) == 0
+            disabled=len(duplicate_history) == 0,
+            use_container_width=True
         ):
-            st.session_state.df = st.session_state["df_history"].pop()
+            st.session_state.df = st.session_state["duplicate_history"].pop()
             st.session_state["dup_msg"] = "Last action undone"
             st.rerun()
 
-        st.markdown("<hr style='border:none; border-top:1px solid #161b22; margin:1.5rem 0;'>", unsafe_allow_html=True)
+        divider()
 
         # ── Download ──
-        st.markdown('<p style="font-family:Space Mono,monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#8b949e; margin-bottom:0.8rem;">Download Dataset</p>', unsafe_allow_html=True)
-
+        eyebrow("Download Dataset")
         csv = st.session_state.df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="Download Cleaned CSV",
@@ -1578,6 +1356,219 @@ if file is not None:
             key="download_dup"
         )
 
-       
+
+
+# ---------- VISUALIZATION ----------
+    with eda_tab6:
+        df = st.session_state.df
+
+        eyebrow("Chart Settings")
+
+        chart_type = st.selectbox(
+            "Select Chart Type",
+            ["Histogram", "Box Plot", "Bar Chart", "Scatter Plot",
+             "Line Chart", "Violin Plot", "Pie Chart"],
+            key="chart_type"
+        )
+
+        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        cat_cols     = df.select_dtypes(include=["object", "category"]).columns.tolist()
+        all_cols     = df.columns.tolist()
+
+        if chart_type in ["Histogram", "Box Plot", "Violin Plot"]:
+            x_options = numeric_cols
+            if not x_options:
+                banner("warn", "No numeric columns available for this chart type.")
+                st.stop()
+            st.caption("Only numeric columns shown for this chart type.")
+        elif chart_type in ["Bar Chart", "Pie Chart"]:
+            x_options = cat_cols
+            if not x_options:
+                banner("warn", "No categorical columns available for this chart type.")
+                st.stop()
+            st.caption("Only categorical columns shown for this chart type.")
+        else:
+            x_options = all_cols
+
+        x_col   = st.selectbox("Select X-axis", x_options, key="x_col")
+        y_col   = None
+        hue_col = None
+
+        if chart_type in ["Scatter Plot", "Line Chart"]:
+            if not numeric_cols:
+                banner("warn", "No numeric columns available for the Y-axis.")
+                st.stop()
+            y_col = st.selectbox("Select Y-axis", numeric_cols, key="y_col")
+
+        if chart_type == "Scatter Plot" and cat_cols:
+            hue_options = ["None"] + cat_cols
+            hue_sel     = st.selectbox("Color by (optional)", hue_options, key="hue_col")
+            hue_col     = None if hue_sel == "None" else hue_sel
+
+        if len(df) > 10000:
+            st.caption(f"Large dataset ({len(df):,} rows) — chart will use 10,000 random samples.")
+
+        show_chart = st.button("Show Chart", key="show_chart_btn", type="primary")
+
+        def style_ax(fig, ax):
+            fig.patch.set_facecolor("#0d1117")
+            ax.set_facecolor("#0d1117")
+            ax.tick_params(colors="#8b949e", labelsize=7)
+            ax.set_xlabel(ax.get_xlabel(), color="#8b949e", fontsize=8)
+            ax.set_ylabel(ax.get_ylabel(), color="#8b949e", fontsize=8)
+            for s in ax.spines.values(): s.set_visible(False)
+            ax.xaxis.grid(True, color="#161b22", linewidth=0.5)
+            ax.yaxis.grid(True, color="#161b22", linewidth=0.5)
+
+        if show_chart:
+            divider()
+            eyebrow("Chart Output")
+
+            with st.spinner("Generating chart..."):
+                try:
+                    plot_df = df.sample(10000, random_state=42) if len(df) > 10000 else df
+
+                    if chart_type == "Histogram":
+                        clean_x = plot_df[x_col].dropna()
+                        if clean_x.empty:
+                            banner("warn", f"<strong>{x_col}</strong> has no non-null values to plot.")
+                        else:
+                            fig, ax = plt.subplots(figsize=(7, 4))
+                            sns.histplot(clean_x, bins=30, color="#388bfd", alpha=0.85, ax=ax, edgecolor="none")
+                            ax.set_xlabel(x_col)
+                            ax.set_ylabel("Count")
+                            style_ax(fig, ax)
+                            plt.tight_layout()
+                            st.pyplot(fig)
+                            download_chart(fig, "viz_histogram_download")
+                            plt.close(fig)
+
+                    elif chart_type == "Box Plot":
+                        clean_x = plot_df[x_col].dropna()
+                        if clean_x.empty:
+                            banner("warn", f"<strong>{x_col}</strong> has no non-null values to plot.")
+                        else:
+                            fig, ax = plt.subplots(figsize=(7, 4))
+                            ax.boxplot(clean_x, vert=False, patch_artist=True, widths=0.5,
+                                       boxprops=dict(facecolor="#161b22", color="#388bfd"),
+                                       medianprops=dict(color="#f78166", linewidth=2),
+                                       whiskerprops=dict(color="#388bfd"),
+                                       capprops=dict(color="#388bfd"),
+                                       flierprops=dict(marker="o", color="#d29922", markersize=3, alpha=0.5))
+                            ax.set_xlabel(x_col)
+                            ax.set_yticks([])
+                            style_ax(fig, ax)
+                            plt.tight_layout()
+                            st.pyplot(fig)
+                            download_chart(fig, "viz_box_download")
+                            plt.close(fig)
+
+                    elif chart_type == "Bar Chart":
+                        counts = plot_df[x_col].value_counts().head(15)
+                        if counts.empty:
+                            banner("warn", f"<strong>{x_col}</strong> has no values to plot.")
+                        else:
+                            fig, ax = plt.subplots(figsize=(7, 4))
+                            colors = ["#388bfd" if i == 0 else "#161b22" for i in range(len(counts))]
+                            ax.barh(counts.index.astype(str)[::-1], counts.values[::-1],
+                                    color=colors[::-1], edgecolor="none")
+                            ax.set_xlabel("Count")
+                            ax.set_ylabel(x_col)
+                            style_ax(fig, ax)
+                            plt.tight_layout()
+                            st.pyplot(fig)
+                            download_chart(fig, "viz_bar_download")
+                            plt.close(fig)
+
+                    elif chart_type == "Scatter Plot":
+                        cols_needed = [x_col, y_col] + ([hue_col] if hue_col else [])
+                        scatter_df  = plot_df[cols_needed].dropna()
+
+                        if scatter_df.empty:
+                            banner("warn", "No valid data remains after removing missing values in the selected columns.")
+                        else:
+                            fig, ax = plt.subplots(figsize=(7, 4))
+                            if hue_col:
+                                categories = scatter_df[hue_col].unique()
+                                palette    = ["#388bfd", "#3fb950", "#f78166", "#d29922", "#bc8cff", "#79c0ff"]
+                                for i, cat in enumerate(categories):
+                                    mask = scatter_df[hue_col] == cat
+                                    ax.scatter(scatter_df.loc[mask, x_col], scatter_df.loc[mask, y_col],
+                                               color=palette[i % len(palette)], label=str(cat),
+                                               alpha=0.6, s=18, edgecolors="none")
+                                ax.legend(fontsize=7, labelcolor="#8b949e", facecolor="#0d1117", edgecolor="#21262d")
+                            else:
+                                ax.scatter(scatter_df[x_col], scatter_df[y_col],
+                                           color="#388bfd", alpha=0.5, s=18, edgecolors="none")
+                            ax.set_xlabel(x_col)
+                            ax.set_ylabel(y_col)
+                            style_ax(fig, ax)
+                            plt.tight_layout()
+                            st.pyplot(fig)
+                            download_chart(fig, "viz_scatter_download")
+                            plt.close(fig)
+
+                    elif chart_type == "Line Chart":
+                        line_df = plot_df[[x_col, y_col]].dropna().sort_values(x_col)
+                        if line_df.empty:
+                            banner("warn", "No valid data remains after removing missing values in the selected columns.")
+                        else:
+                            fig, ax = plt.subplots(figsize=(7, 4))
+                            ax.plot(line_df[x_col], line_df[y_col], color="#388bfd", linewidth=1.5)
+                            ax.set_xlabel(x_col)
+                            ax.set_ylabel(y_col)
+                            style_ax(fig, ax)
+                            plt.tight_layout()
+                            st.pyplot(fig)
+                            download_chart(fig, "viz_line_download")
+                            plt.close(fig)
+
+                    elif chart_type == "Violin Plot":
+                        clean_x = plot_df[x_col].dropna()
+                        if clean_x.empty:
+                            banner("warn", f"<strong>{x_col}</strong> has no non-null values to plot.")
+                        elif clean_x.nunique() < 2:
+                            banner("warn", f"<strong>{x_col}</strong> has only one distinct value -- a violin plot needs some spread of values.")
+                        else:
+                            fig, ax = plt.subplots(figsize=(7, 4))
+                            sns.violinplot(x=clean_x, ax=ax, color="#388bfd", linecolor="#161b22",
+                                           linewidth=0.8, inner="box")
+                            ax.set_xlabel(x_col)
+                            style_ax(fig, ax)
+                            plt.tight_layout()
+                            st.pyplot(fig)
+                            download_chart(fig, "viz_violin_download")
+                            plt.close(fig)
+
+                    elif chart_type == "Pie Chart":
+                        counts = plot_df[x_col].value_counts().head(8)
+                        if counts.empty:
+                            banner("warn", f"<strong>{x_col}</strong> has no values to plot.")
+                        else:
+                            pie_colors = ["#388bfd", "#3fb950", "#f78166", "#d29922",
+                                          "#bc8cff", "#79c0ff", "#56d364", "#e3b341"]
+                            fig, ax = plt.subplots(figsize=(5, 5))
+                            fig.patch.set_facecolor("#0d1117")
+                            wedges, texts, autotexts = ax.pie(
+                                counts.values,
+                                labels=counts.index.astype(str),
+                                colors=pie_colors[:len(counts)],
+                                autopct="%1.1f%%", startangle=140,
+                                textprops={"color": "#8b949e", "fontsize": 7},
+                                wedgeprops={"edgecolor": "#0d1117", "linewidth": 1.5}
+                            )
+                            for at in autotexts:
+                                at.set_color("#f0f6fc")
+                                at.set_fontsize(7)
+                            ax.set_facecolor("#0d1117")
+                            plt.tight_layout()
+                            st.pyplot(fig)
+                            download_chart(fig, "viz_pie_download")
+                            plt.close(fig)
+
+                except Exception as e:
+                    banner("err", f"Error generating chart: {str(e)}")
+
+
 else:
     st.info("Upload a CSV file to begin.")
