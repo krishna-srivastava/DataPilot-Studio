@@ -96,7 +96,7 @@ streamlit run app.py
 ---
 
 ## App Preview:
-![DataPilot Studio Screenshot](app_screenshot.png)
+![DataPilot Studio Screenshot](app screenshot.png)
 
 ---
 
