@@ -3,4 +3,7 @@ pandas
 numpy
 matplotlib
 seaborn
+scikit-learn
 pyarrow
+xgboost
+lightgbm
