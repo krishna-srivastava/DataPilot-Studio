@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
-import io
-import pickle
+import seaborn as sns 
+import io 
+import pickle  
 
 try:
     from xgboost import XGBClassifier, XGBRegressor
