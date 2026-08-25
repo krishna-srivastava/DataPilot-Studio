@@ -1137,34 +1137,150 @@ if file is not None:
 
             divider()
 
-            # ── Rename Column ──
-            eyebrow("Rename a Column")
+            # ── Add Column (From Ranges) ──
+            eyebrow("Add Column (From Ranges)")
+            st.markdown(
+                '<p style="font-size:0.7rem;color:#8b949e;margin-top:-0.6rem;margin-bottom:0.8rem;">'
+                'Create a new column by grouping a numeric column into labeled ranges '
+                '(e.g. Age → Children / Young / Adult). Only numeric columns with '
+                '<strong>no missing values</strong> are eligible -- fill missing values above first.</p>',
+                unsafe_allow_html=True
+            )
 
             df = st.session_state.df
+            eligible_cols = [
+                c for c in df.select_dtypes(include=np.number).columns
+                if df[c].isnull().sum() == 0
+            ]
 
-            if len(df.columns) == 0:
-                banner("warn", "No columns remaining to rename. Reset the dataset first.")
+            if not eligible_cols:
+                banner("warn", "No eligible numeric columns -- fill missing values in a numeric column above first, or this dataset has no numeric columns.")
             else:
-                rn1, rn2, rn3 = st.columns([2, 2, 1])
-                with rn1:
-                    rename_col = st.selectbox("Select Column", df.columns.tolist(), key="rename_col")
-                with rn2:
-                    new_name = st.text_input("New Name", placeholder="Enter new column name", key="rename_new")
-                with rn3:
-                    st.markdown('<div style="height:1.7rem;"></div>', unsafe_allow_html=True)
-                    rename_btn = st.button("Rename", key="rename_btn", use_container_width=True)
+                ac1, ac2 = st.columns(2)
+                with ac1:
+                    source_col = st.selectbox(
+                        "Source Column (numeric, no missing values)",
+                        eligible_cols,
+                        key="acr_source_col"
+                    )
+                with ac2:
+                    new_col_name = st.text_input(
+                        "New Column Name",
+                        placeholder="e.g. age_group",
+                        key="acr_new_col_name"
+                    )
 
-                if rename_btn:
-                    cleaned_name = new_name.strip()
-                    if not cleaned_name:
-                        banner("err", "New name cannot be empty.")
-                    elif cleaned_name in df.columns and cleaned_name != rename_col:
-                        banner("err", f"Column '{cleaned_name}' already exists.")
-                    else:
-                        push_cleaning_history()
-                        st.session_state.df = st.session_state.df.rename(columns={rename_col: cleaned_name})
-                        st.session_state["last_action"] = f"'{rename_col}' renamed to '{cleaned_name}'"
-                        st.rerun()
+                col_min = float(df[source_col].min())
+                col_max = float(df[source_col].max())
+                st.caption(f"'{source_col}' ranges from {col_min:g} to {col_max:g} in this dataset — ranges below can't go outside this.")
+
+                if "acr_rows" not in st.session_state or st.session_state.get("acr_rows_for_col") != source_col:
+                    st.session_state["acr_rows"] = [{"id": 0, "min": col_min, "max": col_max, "label": ""}]
+                    st.session_state["acr_next_id"] = 1
+                    st.session_state["acr_rows_for_col"] = source_col
+
+                row_to_delete = None
+                for row in st.session_state["acr_rows"]:
+                    row["min"] = min(max(float(row["min"]), col_min), col_max)
+                    row["max"] = min(max(float(row["max"]), col_min), col_max)
+
+                    rc1, rc2, rc3, rc4 = st.columns([2, 2, 3, 1])
+                    with rc1:
+                        row["min"] = st.number_input(
+                            "Min", value=row["min"],
+                            min_value=col_min, max_value=col_max,
+                            key=f"acr_min_{row['id']}"
+                        )
+                    with rc2:
+                        row["max"] = st.number_input(
+                            "Max", value=row["max"],
+                            min_value=col_min, max_value=col_max,
+                            key=f"acr_max_{row['id']}"
+                        )
+                    with rc3:
+                        row["label"] = st.text_input(
+                            "Label", value=row["label"], placeholder="e.g. Children", key=f"acr_label_{row['id']}"
+                        )
+                    with rc4:
+                        st.markdown('<div style="height:1.7rem;"></div>', unsafe_allow_html=True)
+                        if st.button(
+                            "🗑", key=f"acr_del_{row['id']}", use_container_width=True,
+                            disabled=len(st.session_state["acr_rows"]) <= 1
+                        ):
+                            row_to_delete = row["id"]
+
+                if row_to_delete is not None:
+                    st.session_state["acr_rows"] = [
+                        r for r in st.session_state["acr_rows"] if r["id"] != row_to_delete
+                    ]
+                    st.rerun()
+
+                if st.button("+ Add Range", key="acr_add_row"):
+                    new_id = st.session_state["acr_next_id"]
+                    st.session_state["acr_rows"].append({"id": new_id, "min": col_min, "max": col_max, "label": ""})
+                    st.session_state["acr_next_id"] += 1
+                    st.rerun()
+
+                divider()
+
+                # ── Validation (runs every render, before the Apply button) ──
+                errors = []
+                name_clean = new_col_name.strip()
+                if not name_clean:
+                    errors.append("Enter a name for the new column.")
+                elif name_clean in df.columns:
+                    errors.append(f"Column '{name_clean}' already exists -- choose a different name.")
+
+                ranges = st.session_state["acr_rows"]
+                for i, r in enumerate(ranges, start=1):
+                    if r["min"] > r["max"]:
+                        errors.append(f"Range {i}: Min ({r['min']:g}) cannot be greater than Max ({r['max']:g}).")
+                    if not r["label"].strip():
+                        errors.append(f"Range {i}: Label cannot be empty.")
+
+                    if r["min"] < col_min or r["max"] > col_max:
+                        errors.append(
+                            f"Range {i}: must stay within '{source_col}''s actual range "
+                            f"({col_min:g}–{col_max:g})."
+                        )
+
+                sorted_ranges = sorted(ranges, key=lambda r: r["min"])
+                for i in range(len(sorted_ranges) - 1):
+                    if sorted_ranges[i]["max"] >= sorted_ranges[i + 1]["min"]:
+                        errors.append(
+                            f"Ranges overlap: '{sorted_ranges[i]['label'] or '(unlabeled)'}' "
+                            f"({sorted_ranges[i]['min']:g}-{sorted_ranges[i]['max']:g}) overlaps with "
+                            f"'{sorted_ranges[i + 1]['label'] or '(unlabeled)'}' "
+                            f"({sorted_ranges[i + 1]['min']:g}-{sorted_ranges[i + 1]['max']:g})."
+                        )
+                        break
+
+                if errors:
+                    for e in errors:
+                        banner("err", e)
+
+                if st.button(
+                    "Add Column", key="acr_apply_btn", type="primary",
+                    disabled=len(errors) > 0, use_container_width=True
+                ):
+                    conditions = [(df[source_col] >= r["min"]) & (df[source_col] <= r["max"]) for r in ranges]
+                    choices    = [r["label"].strip() for r in ranges]
+
+                    new_values = np.select(conditions, choices, default="")
+                    new_series = pd.Series(new_values, index=df.index).replace("", np.nan)
+
+                    push_cleaning_history()
+                    st.session_state.df[name_clean] = new_series
+                    uncovered = int(new_series.isna().sum())
+
+                    msg = f"Column '{name_clean}' created from '{source_col}'"
+                    if uncovered > 0:
+                        msg += f" -- {uncovered} row(s) fell outside all ranges and were left blank"
+
+                    st.session_state["last_action"] = msg
+                    st.session_state.pop("acr_rows", None)
+                    st.session_state.pop("acr_rows_for_col", None)
+                    st.rerun()
 
             divider()
 
@@ -1192,10 +1308,10 @@ if file is not None:
             divider()
 
             # ── Undo / Reset ──
-            eyebrow("Undo / Reset", )
+            eyebrow("Undo / Reset")
             st.markdown(
                 '<p style="font-size:0.7rem;color:#8b949e;margin-top:-0.6rem;margin-bottom:0.8rem;">'
-                'Undo reverses your last fill / rename / delete action on this tab. Reset always restores the original uploaded file.</p>',
+                'Undo reverses your last fill / add-column / delete action on this tab. Reset always restores the original uploaded file.</p>',
                 unsafe_allow_html=True
             )
 
@@ -1217,6 +1333,8 @@ if file is not None:
                 if st.button("🔄 Reset to Original Dataset", key="fill_reset_btn", use_container_width=True):
                     st.session_state.df = st.session_state.original_df.copy()
                     st.session_state["cleaning_history"] = []
+                    st.session_state.pop("acr_rows", None)
+                    st.session_state.pop("acr_rows_for_col", None)
                     st.session_state["last_action"] = "Dataset reset to original"
                     st.rerun()
 
@@ -1367,216 +1485,471 @@ if file is not None:
         # ---------- VISUALIZATION ----------
         with eda_tab6:
             df = st.session_state.df
-            eyebrow("Chart Settings")
+            from matplotlib.ticker import FuncFormatter
 
+            # ── column pools ──
+            numeric_cols  = df.select_dtypes(include=np.number).columns.tolist()
+            cat_cols      = df.select_dtypes(include=["object", "category", "string"]).columns.tolist()
+            datetime_cols = [c for c in df.columns if pd.api.types.is_datetime64_any_dtype(df[c])]
+            x_axis_cols   = cat_cols + datetime_cols 
+
+            AGG_FUNCS = {
+                "Sum": "sum", "Mean": "mean", "Median": "median",
+                "Min": "min", "Max": "max", "Count": "count",
+            }
+            PALETTE = ["#388bfd", "#3fb950", "#f78166", "#d29922", "#bc8cff",
+                       "#79c0ff", "#56d364", "#e3b341", "#ff7b72", "#8b949e"]
+            MAX_CATEGORIES        = 50 
+            MAX_LEGEND_CATEGORIES = 15   
+
+            # ── shared helpers (scoped to this tab -- do not shadow global ones) ──
+            def fmt_large(value, _pos=None):
+                try:
+                    v = float(value)
+                except (TypeError, ValueError):
+                    return str(value)
+                a = abs(v)
+                if a >= 1_000_000_000: return f"{v/1_000_000_000:.1f}B"
+                if a >= 1_000_000:     return f"{v/1_000_000:.1f}M"
+                if a >= 1_000:         return f"{v/1_000:.1f}K"
+                return f"{v:g}"
+
+            def style_chart(fig, ax, rotate_x=False, horizontal=False):
+                fig.patch.set_facecolor("#0d1117")
+                ax.set_facecolor("#0d1117")
+                ax.tick_params(colors="#8b949e", labelsize=7.5)
+                ax.set_xlabel(ax.get_xlabel(), color="#8b949e", fontsize=8.5)
+                ax.set_ylabel(ax.get_ylabel(), color="#8b949e", fontsize=8.5)
+                if ax.get_title():
+                    ax.set_title(ax.get_title(), color="#f0f6fc", fontsize=10.5, fontweight="bold", pad=10)
+                for s in ax.spines.values():
+                    s.set_visible(False)
+                if horizontal:
+                    ax.xaxis.grid(True, color="#161b22", linewidth=0.6)
+                else:
+                    ax.yaxis.grid(True, color="#161b22", linewidth=0.6)
+                if rotate_x:
+                    plt.setp(ax.get_xticklabels(), rotation=40, ha="right")
+
+            def clean_for(cols):
+                sub = df[cols].dropna()
+                return sub, len(df) - len(sub)
+
+            def warn_if_dropped(dropped, total):
+                if total > 0 and dropped / total > 0.3:
+                    banner("warn", f"{dropped:,} of {total:,} rows were excluded due to missing values in the selected columns.")
+
+            def top_n_and_sort(series, sort_option, top_n_option):
+                s = series.copy()
+                if sort_option == "Descending":
+                    s = s.sort_values(ascending=False)
+                elif sort_option == "Ascending":
+                    s = s.sort_values(ascending=True)
+                s = s.head(int(top_n_option))
+                return s
+
+            def low_cardinality_cat_cols(exclude_col=None, max_unique=MAX_LEGEND_CATEGORIES):
+                """Categorical columns safe to use for a legend/hue/color-by dropdown --
+                excludes columns whose cardinality would blow up the chart (e.g. an ID column
+                with thousands of unique values) instead of only truncating after the fact."""
+                candidates = [c for c in cat_cols if c != exclude_col]
+                safe    = [c for c in candidates if 2 <= df[c].nunique() <= max_unique]
+                skipped = [c for c in candidates if c not in safe]
+                return safe, skipped
+
+            # ── Chart type selector ──
             chart_type = st.selectbox(
-                "Select Chart Type",
-                ["Histogram", "Box Plot", "Bar Chart", "Scatter Plot",
-                "Line Chart", "Violin Plot", "Pie Chart"],
-                key="chart_type"
+                "Chart Type",
+                ["Bar Chart", "Line Chart", "Area Chart", "Scatter Plot",
+                 "Histogram", "Box Plot", "Pie Chart"],
+                key="viz_chart_type"
             )
 
-            numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-            cat_cols     = df.select_dtypes(include=["object", "category"]).columns.tolist()
-            all_cols     = df.columns.tolist()
+            divider()
+            eyebrow("Configure")
 
-            can_proceed = True
-            x_options   = all_cols
+            config_ok = True
+            cfg = {}
 
-            if chart_type in ["Histogram", "Box Plot", "Violin Plot"]:
-                x_options = numeric_cols
-                if not x_options:
-                    banner("warn", "No numeric columns available for this chart type.")
-                    can_proceed = False
+            # ============ HISTOGRAM ============
+            if chart_type == "Histogram":
+                if not numeric_cols:
+                    banner("warn", "No numeric columns available for a histogram.")
+                    config_ok = False
                 else:
-                    st.caption("Only numeric columns shown for this chart type.")
-            elif chart_type in ["Bar Chart", "Pie Chart"]:
-                x_options = cat_cols
-                if not x_options:
-                    banner("warn", "No categorical columns available for this chart type.")
-                    can_proceed = False
+                    cfg["col"]  = st.selectbox("Numerical Column", numeric_cols, key="viz_hist_col")
+                    cfg["bins"] = st.slider("Number of Bins", 5, 100, 30, key="viz_hist_bins")
+
+            # ============ BOX PLOT ============
+            elif chart_type == "Box Plot":
+                if not numeric_cols:
+                    banner("warn", "No numeric columns available for a box plot.")
+                    config_ok = False
                 else:
-                    st.caption("Only categorical columns shown for this chart type.")
+                    b1, b2 = st.columns(2)
+                    with b1:
+                        cfg["value_col"] = st.selectbox("Numerical Column", numeric_cols, key="viz_box_val")
+                    with b2:
+                        group_sel = st.selectbox("Group By (optional)", ["None"] + cat_cols, key="viz_box_group")
+                        cfg["group_col"] = None if group_sel == "None" else group_sel
 
-            if can_proceed and chart_type in ["Scatter Plot", "Line Chart"] and not numeric_cols:
-                banner("warn", "No numeric columns available for the Y-axis.")
-                can_proceed = False
+            # ============ SCATTER PLOT ============
+            elif chart_type == "Scatter Plot":
+                if len(numeric_cols) < 2:
+                    banner("warn", "Need at least 2 numeric columns for a scatter plot.")
+                    config_ok = False
+                else:
+                    s1, s2 = st.columns(2)
+                    with s1:
+                        cfg["x_col"] = st.selectbox("X-axis (numeric)", numeric_cols, key="viz_sc_x")
+                    with s2:
+                        y_choices = [c for c in numeric_cols if c != cfg["x_col"]] or numeric_cols
+                        cfg["y_col"] = st.selectbox("Y-axis (numeric)", y_choices, key="viz_sc_y")
 
-            if can_proceed:
-                x_col   = st.selectbox("Select X-axis", x_options, key="x_col")
-                y_col   = None
-                hue_col = None
+                    color_options, color_skipped = low_cardinality_cat_cols()
 
-                if chart_type in ["Scatter Plot", "Line Chart"]:
-                    y_col = st.selectbox("Select Y-axis", numeric_cols, key="y_col")
+                    s3, s4 = st.columns(2)
+                    with s3:
+                        color_sel = st.selectbox("Color by (optional)", ["None"] + color_options, key="viz_sc_color")
+                        cfg["color_col"] = None if color_sel == "None" else color_sel
+                    with s4:
+                        size_opts = ["None"] + [c for c in numeric_cols if c not in (cfg["x_col"], cfg["y_col"])]
+                        size_sel  = st.selectbox("Size by (optional)", size_opts, key="viz_sc_size")
+                        cfg["size_col"] = None if size_sel == "None" else size_sel
 
-                if chart_type == "Scatter Plot" and cat_cols:
-                    hue_options = ["None"] + cat_cols
-                    hue_sel     = st.selectbox("Color by (optional)", hue_options, key="hue_col")
-                    hue_col     = None if hue_sel == "None" else hue_sel
+                    if color_skipped:
+                        st.caption(f"Not shown for Color by (too many categories, >{MAX_LEGEND_CATEGORIES}): {', '.join(color_skipped)}")
 
-                if len(df) > 10000:
-                    st.caption(f"Large dataset ({len(df):,} rows) — chart will use 10,000 random samples.")
+            # ============ PIE CHART ============
+            elif chart_type == "Pie Chart":
+                if not cat_cols:
+                    banner("warn", "No categorical columns available for a pie chart.")
+                    config_ok = False
+                else:
+                    p1, p2 = st.columns(2)
+                    with p1:
+                        cfg["cat_col"] = st.selectbox("Category", cat_cols, key="viz_pie_cat")
+                    with p2:
+                        value_sel = st.selectbox("Value", ["Count (rows)"] + numeric_cols, key="viz_pie_val")
+                        cfg["value_col"] = None if value_sel == "Count (rows)" else value_sel
+                    cfg["agg"] = (
+                        st.selectbox("Aggregation", ["Sum", "Mean", "Median", "Min", "Max"], key="viz_pie_agg")
+                        if cfg["value_col"] else "Count"
+                    )
 
-                show_chart = st.button("Show Chart", key="show_chart_btn", type="primary")
+            # ============ BAR / LINE / AREA (shared field layout) ============
+            else:
+                if not x_axis_cols:
+                    banner("warn", "No categorical or datetime columns available for the X-axis. Bar / Line / Area charts group a numeric Y-axis value by a categorical or date X-axis.")
+                    config_ok = False
+                elif not numeric_cols:
+                    banner("warn", "No numeric columns available for the Y-axis.")
+                    config_ok = False
+                else:
+                    v1, v2 = st.columns(2)
+                    with v1:
+                        cfg["x_col"] = st.selectbox("X-axis (category / date)", x_axis_cols, key=f"viz_xy_x_{chart_type}")
+                    with v2:
+                        cfg["y_col"] = st.selectbox("Y-axis (numeric)", numeric_cols, key=f"viz_xy_y_{chart_type}")
 
-                def style_ax(fig, ax):
-                    fig.patch.set_facecolor("#0d1117")
-                    ax.set_facecolor("#0d1117")
-                    ax.tick_params(colors="#8b949e", labelsize=7)
-                    ax.set_xlabel(ax.get_xlabel(), color="#8b949e", fontsize=8)
-                    ax.set_ylabel(ax.get_ylabel(), color="#8b949e", fontsize=8)
-                    for s in ax.spines.values(): s.set_visible(False)
-                    ax.xaxis.grid(True, color="#161b22", linewidth=0.5)
-                    ax.yaxis.grid(True, color="#161b22", linewidth=0.5)
+                    color_options, color_skipped = low_cardinality_cat_cols(exclude_col=cfg["x_col"])
 
-                if show_chart:
-                    divider()
-                    eyebrow("Chart Output")
-                    with st.spinner("Generating chart..."):
-                        try:
-                            plot_df = df.sample(10000, random_state=42) if len(df) > 10000 else df
+                    v3, v4 = st.columns(2)
+                    with v3:
+                        cfg["agg"] = st.selectbox("Aggregation", list(AGG_FUNCS.keys()), key=f"viz_xy_agg_{chart_type}")
+                    with v4:
+                        color_sel = st.selectbox("Color / Legend (optional)", ["None"] + color_options, key=f"viz_xy_color_{chart_type}")
+                        cfg["color_col"] = None if color_sel == "None" else color_sel
 
-                            if chart_type == "Histogram":
-                                clean_x = plot_df[x_col].dropna()
-                                if clean_x.empty:
-                                    banner("warn", f"<strong>{x_col}</strong> has no non-null values to plot.")
+                    if color_skipped:
+                        st.caption(f"Not shown for Color / Legend (too many categories, >{MAX_LEGEND_CATEGORIES}): {', '.join(color_skipped)}")
+
+                    is_dt_x = cfg["x_col"] in datetime_cols
+
+                    if chart_type == "Bar Chart" and not is_dt_x:
+                        v5, v6 = st.columns(2)
+                        with v5:
+                            cfg["sort"] = st.selectbox("Sort", ["Descending", "Ascending", "Original order"], key="viz_bar_sort")
+                        with v6:
+                            cfg["top_n"] = st.selectbox("Show Top N", ["5", "10", "15", "20"], index=1, key="viz_bar_topn")
+                    else:
+                        cfg["sort"], cfg["top_n"] = "Original order", str(MAX_CATEGORIES)
+
+            divider()
+            generate = st.button("Generate Chart", key="viz_generate_btn", type="primary", disabled=not config_ok)
+
+            if generate and config_ok:
+                divider()
+                eyebrow("Chart Output")
+                with st.spinner("Generating chart..."):
+                    try:
+                        # ============ HISTOGRAM ============
+                        if chart_type == "Histogram":
+                            col = cfg["col"]
+                            clean = df[[col]].dropna()[col]
+                            if clean.empty:
+                                banner("warn", f"<strong>{col}</strong> has no non-null values to plot.")
+                            else:
+                                mean_v, median_v = clean.mean(), clean.median()
+                                st.caption(f"n = {len(clean):,}   ·   mean = {mean_v:,.2f}   ·   median = {median_v:,.2f}")
+                                fig, ax = plt.subplots(figsize=(7.5, 4))
+                                sns.histplot(clean, bins=cfg["bins"], color="#388bfd", alpha=0.85, ax=ax, edgecolor="none")
+                                ax.axvline(mean_v, color="#d29922", linewidth=1.2, linestyle="--", label="Mean")
+                                ax.axvline(median_v, color="#3fb950", linewidth=1.2, linestyle="--", label="Median")
+                                ax.legend(fontsize=7, labelcolor="#8b949e", facecolor="#0d1117", edgecolor="#21262d")
+                                ax.set_xlabel(col); ax.set_ylabel("Frequency")
+                                ax.set_title(f"Distribution of {col}")
+                                ax.yaxis.set_major_formatter(FuncFormatter(fmt_large))
+                                style_chart(fig, ax)
+                                plt.tight_layout(); st.pyplot(fig)
+                                download_chart(fig, "viz_histogram_download")
+                                plt.close(fig)
+
+                        # ============ BOX PLOT ============
+                        elif chart_type == "Box Plot":
+                            value_col, group_col = cfg["value_col"], cfg["group_col"]
+                            if group_col:
+                                sub, dropped = clean_for([value_col, group_col])
+                                warn_if_dropped(dropped, len(df))
+                                if sub.empty:
+                                    banner("warn", "No valid data remains after removing missing values.")
                                 else:
-                                    fig, ax = plt.subplots(figsize=(7, 4))
-                                    sns.histplot(clean_x, bins=30, color="#388bfd", alpha=0.85, ax=ax, edgecolor="none")
-                                    ax.set_xlabel(x_col)
-                                    ax.set_ylabel("Count")
-                                    style_ax(fig, ax)
-                                    plt.tight_layout()
-                                    st.pyplot(fig)
-                                    download_chart(fig, "viz_histogram_download")
+                                    top_cats = sub[group_col].value_counts().head(15).index.tolist()
+                                    sub = sub[sub[group_col].isin(top_cats)]
+                                    groups = [sub.loc[sub[group_col] == c, value_col].values for c in top_cats]
+                                    fig, ax = plt.subplots(figsize=(max(7, len(top_cats) * 0.9), 4.5))
+                                    ax.boxplot(groups, vert=True, patch_artist=True, widths=0.55,
+                                               boxprops=dict(facecolor="#161b22", color="#388bfd"),
+                                               medianprops=dict(color="#f78166", linewidth=2),
+                                               whiskerprops=dict(color="#388bfd"), capprops=dict(color="#388bfd"),
+                                               flierprops=dict(marker="o", color="#d29922", markersize=3, alpha=0.5))
+                                    ax.set_xticks(range(1, len(top_cats) + 1))
+                                    ax.set_xticklabels([str(c) for c in top_cats])
+                                    ax.set_ylabel(value_col); ax.set_xlabel(group_col)
+                                    ax.set_title(f"{value_col} Distribution by {group_col}")
+                                    style_chart(fig, ax, rotate_x=len(top_cats) > 6)
+                                    plt.tight_layout(); st.pyplot(fig)
+                                    download_chart(fig, "viz_box_download")
                                     plt.close(fig)
-
-                            elif chart_type == "Box Plot":
-                                clean_x = plot_df[x_col].dropna()
-                                if clean_x.empty:
-                                    banner("warn", f"<strong>{x_col}</strong> has no non-null values to plot.")
+                                    if sub[group_col].nunique() < df[group_col].nunique():
+                                        st.caption(f"Showing the 15 most frequent categories of '{group_col}'.")
+                            else:
+                                clean = df[[value_col]].dropna()[value_col]
+                                if clean.empty:
+                                    banner("warn", f"<strong>{value_col}</strong> has no non-null values to plot.")
                                 else:
-                                    fig, ax = plt.subplots(figsize=(7, 4))
-                                    ax.boxplot(clean_x, vert=False, patch_artist=True, widths=0.5,
-                                            boxprops=dict(facecolor="#161b22", color="#388bfd"),
-                                            medianprops=dict(color="#f78166", linewidth=2),
-                                            whiskerprops=dict(color="#388bfd"),
-                                            capprops=dict(color="#388bfd"),
-                                            flierprops=dict(marker="o", color="#d29922", markersize=3, alpha=0.5))
-                                    ax.set_xlabel(x_col)
-                                    ax.set_yticks([])
-                                    style_ax(fig, ax)
-                                    plt.tight_layout()
-                                    st.pyplot(fig)
+                                    fig, ax = plt.subplots(figsize=(7, 3.2))
+                                    ax.boxplot(clean, vert=False, patch_artist=True, widths=0.5,
+                                               boxprops=dict(facecolor="#161b22", color="#388bfd"),
+                                               medianprops=dict(color="#f78166", linewidth=2),
+                                               whiskerprops=dict(color="#388bfd"), capprops=dict(color="#388bfd"),
+                                               flierprops=dict(marker="o", color="#d29922", markersize=3, alpha=0.5))
+                                    ax.set_xlabel(value_col); ax.set_yticks([])
+                                    ax.set_title(f"{value_col} Distribution")
+                                    style_chart(fig, ax, horizontal=True)
+                                    plt.tight_layout(); st.pyplot(fig)
                                     download_chart(fig, "viz_box_download")
                                     plt.close(fig)
 
-                            elif chart_type == "Bar Chart":
-                                counts = plot_df[x_col].value_counts().head(15)
-                                if counts.empty:
-                                    banner("warn", f"<strong>{x_col}</strong> has no values to plot.")
+                        # ============ SCATTER PLOT ============
+                        elif chart_type == "Scatter Plot":
+                            x_col, y_col = cfg["x_col"], cfg["y_col"]
+                            color_col, size_col = cfg["color_col"], cfg["size_col"]
+                            needed = [x_col, y_col] + ([color_col] if color_col else []) + ([size_col] if size_col else [])
+                            sub, dropped = clean_for(needed)
+                            warn_if_dropped(dropped, len(df))
+                            if sub.empty:
+                                banner("warn", "No valid data remains after removing missing values in the selected columns.")
+                            else:
+                                sampled = False
+                                if len(sub) > 10000:
+                                    sub = sub.sample(10000, random_state=42); sampled = True
+                                fig, ax = plt.subplots(figsize=(7.5, 4.5))
+                                sizes = 18
+                                if size_col:
+                                    raw = sub[size_col].astype(float)
+                                    rng = raw.max() - raw.min()
+                                    sizes = 15 + ((raw - raw.min()) / rng * 90 if rng > 0 else 30)
+                                if color_col:
+                                    for i, cat in enumerate(sub[color_col].unique()):
+                                        mask = sub[color_col] == cat
+                                        pt_sizes = sizes[mask] if hasattr(sizes, "__len__") else sizes
+                                        ax.scatter(sub.loc[mask, x_col], sub.loc[mask, y_col],
+                                                   color=PALETTE[i % len(PALETTE)], label=str(cat),
+                                                   alpha=0.65, s=pt_sizes, edgecolors="none")
+                                    ax.legend(fontsize=7, labelcolor="#8b949e", facecolor="#0d1117",
+                                              edgecolor="#21262d", title=color_col, title_fontsize=7)
                                 else:
-                                    fig, ax = plt.subplots(figsize=(7, 4))
-                                    colors = ["#388bfd" if i == 0 else "#161b22" for i in range(len(counts))]
-                                    ax.barh(counts.index.astype(str)[::-1], counts.values[::-1],
-                                            color=colors[::-1], edgecolor="none")
-                                    ax.set_xlabel("Count")
-                                    ax.set_ylabel(x_col)
-                                    style_ax(fig, ax)
-                                    plt.tight_layout()
-                                    st.pyplot(fig)
+                                    ax.scatter(sub[x_col], sub[y_col], color="#388bfd", alpha=0.55, s=sizes, edgecolors="none")
+                                ax.set_xlabel(x_col); ax.set_ylabel(y_col)
+                                ax.set_title(f"{y_col} vs {x_col}")
+                                ax.xaxis.set_major_formatter(FuncFormatter(fmt_large))
+                                ax.yaxis.set_major_formatter(FuncFormatter(fmt_large))
+                                style_chart(fig, ax)
+                                plt.tight_layout(); st.pyplot(fig)
+                                if sampled:
+                                    st.caption(f"Showing a random sample of 10,000 of {len(df):,} rows for rendering speed.")
+                                download_chart(fig, "viz_scatter_download")
+                                plt.close(fig)
+
+                        # ============ PIE CHART ============
+                        elif chart_type == "Pie Chart":
+                            cat_col, value_col, agg_label = cfg["cat_col"], cfg["value_col"], cfg["agg"]
+                            series = None
+                            if value_col:
+                                sub, dropped = clean_for([cat_col, value_col])
+                                warn_if_dropped(dropped, len(df))
+                                if not sub.empty:
+                                    series = sub.groupby(cat_col)[value_col].agg(AGG_FUNCS[agg_label])
+                            else:
+                                sub, dropped = clean_for([cat_col])
+                                warn_if_dropped(dropped, len(df))
+                                if not sub.empty:
+                                    series = sub[cat_col].value_counts()
+
+                            if series is None or series.empty:
+                                banner("warn", f"<strong>{cat_col}</strong> has no values to plot.")
+                            else:
+                                series = series.sort_values(ascending=False)
+                                if len(series) > 8:
+                                    series = pd.concat([series.head(8), pd.Series({"Other": series.iloc[8:].sum()})])
+
+                                fig, ax = plt.subplots(figsize=(5.5, 5.5))
+                                fig.patch.set_facecolor("#0d1117")
+                                wedges, texts, autotexts = ax.pie(
+                                    series.values, labels=series.index.astype(str),
+                                    colors=PALETTE[:len(series)], autopct="%1.1f%%", startangle=90,
+                                    pctdistance=0.72, textprops={"color": "#8b949e", "fontsize": 7.5},
+                                    wedgeprops={"edgecolor": "#0d1117", "linewidth": 1.5},
+                                )
+                                for at in autotexts:
+                                    at.set_color("#f0f6fc"); at.set_fontsize(7.5)
+                                ax.set_facecolor("#0d1117")
+                                metric = value_col if value_col else "Count"
+                                ax.set_title(f"{agg_label} of {metric} by {cat_col}",
+                                             color="#f0f6fc", fontsize=10.5, fontweight="bold", pad=12)
+                                plt.tight_layout(); st.pyplot(fig)
+                                download_chart(fig, "viz_pie_download")
+                                plt.close(fig)
+
+                        # ============ BAR / LINE / AREA ============
+                        else:
+                            x_col, y_col, agg_label = cfg["x_col"], cfg["y_col"], cfg["agg"]
+                            color_col = cfg["color_col"]
+                            needed = [x_col, y_col] + ([color_col] if color_col else [])
+                            sub, dropped = clean_for(needed)
+                            warn_if_dropped(dropped, len(df))
+
+                            if sub.empty:
+                                banner("warn", "No valid data remains after removing missing values in the selected columns.")
+                            else:
+                                is_dt_x   = x_col in datetime_cols
+                                agg_func  = AGG_FUNCS[agg_label]
+                                grouped   = None
+                                series    = None
+
+                                if color_col:
+                                    grouped = sub.groupby([x_col, color_col])[y_col].agg(agg_func).unstack(fill_value=0)
+                                    if is_dt_x:
+                                        grouped = grouped.sort_index()
+                                    else:
+                                        order = grouped.sum(axis=1)
+                                        grouped = grouped.loc[top_n_and_sort(order, cfg["sort"], cfg["top_n"]).index]
+                                        if len(grouped) > MAX_CATEGORIES:
+                                            banner("info", f"{len(grouped):,} categories found — showing the top {MAX_CATEGORIES} by total value for readability.")
+                                            order = grouped.sum(axis=1)
+                                            grouped = grouped.loc[order.sort_values(ascending=False).head(MAX_CATEGORIES).index]
+                                else:
+                                    series = sub.groupby(x_col)[y_col].agg(agg_func)
+                                    if is_dt_x:
+                                        series = series.sort_index()
+                                    else:
+                                        series = top_n_and_sort(series, cfg["sort"], cfg["top_n"])
+                                        if len(series) > MAX_CATEGORIES:
+                                            banner("info", f"{len(series):,} categories found — showing the top {MAX_CATEGORIES} by value for readability.")
+                                            series = series.sort_values(ascending=False).head(MAX_CATEGORIES)
+
+                                n_cats = len(grouped) if grouped is not None else len(series)
+                                title  = f"{agg_label} of {y_col} by {x_col}"
+
+                                # ---- BAR ----
+                                if chart_type == "Bar Chart":
+                                    if color_col:
+                                        fig, ax = plt.subplots(figsize=(max(7, n_cats * 0.5), 4.5))
+                                        bottom = np.zeros(len(grouped))
+                                        labels = [str(v) for v in grouped.index]
+                                        for i, cat in enumerate(grouped.columns):
+                                            ax.bar(labels, grouped[cat].values, bottom=bottom,
+                                                   color=PALETTE[i % len(PALETTE)], label=str(cat), edgecolor="none")
+                                            bottom += grouped[cat].values
+                                        ax.legend(fontsize=7, labelcolor="#8b949e", facecolor="#0d1117",
+                                                  edgecolor="#21262d", title=color_col, title_fontsize=7)
+                                        ax.set_xlabel(x_col); ax.set_ylabel(f"{agg_label} of {y_col}")
+                                        ax.yaxis.set_major_formatter(FuncFormatter(fmt_large))
+                                        ax.set_title(title)
+                                        style_chart(fig, ax, rotate_x=n_cats > 6)
+                                    elif is_dt_x:
+                                        fig, ax = plt.subplots(figsize=(7.5, 4.5))
+                                        ax.bar(series.index, series.values, color="#388bfd", width=0.8, edgecolor="none")
+                                        ax.set_xlabel(x_col); ax.set_ylabel(f"{agg_label} of {y_col}")
+                                        ax.yaxis.set_major_formatter(FuncFormatter(fmt_large))
+                                        ax.set_title(title)
+                                        style_chart(fig, ax, rotate_x=True)
+                                    else:
+                                        max_idx = int(np.argmax(series.values)) if len(series) else 0
+                                        colors  = ["#388bfd" if i == max_idx else "#21262d" for i in range(len(series))]
+                                        fig, ax = plt.subplots(figsize=(7.5, max(3, len(series) * 0.4)))
+                                        ax.barh([str(v) for v in series.index][::-1], series.values[::-1],
+                                                color=colors[::-1], edgecolor="none")
+                                        ax.set_ylabel(x_col); ax.set_xlabel(f"{agg_label} of {y_col}")
+                                        ax.xaxis.set_major_formatter(FuncFormatter(fmt_large))
+                                        ax.set_title(title)
+                                        style_chart(fig, ax, horizontal=True)
+                                    plt.tight_layout(); st.pyplot(fig)
                                     download_chart(fig, "viz_bar_download")
                                     plt.close(fig)
 
-                            elif chart_type == "Scatter Plot":
-                                cols_needed = [x_col, y_col] + ([hue_col] if hue_col else [])
-                                scatter_df  = plot_df[cols_needed].dropna()
-
-                                if scatter_df.empty:
-                                    banner("warn", "No valid data remains after removing missing values in the selected columns.")
-                                else:
-                                    fig, ax = plt.subplots(figsize=(7, 4))
-                                    if hue_col:
-                                        categories = scatter_df[hue_col].unique()
-                                        palette    = ["#388bfd", "#3fb950", "#f78166", "#d29922", "#bc8cff", "#79c0ff"]
-                                        for i, cat in enumerate(categories):
-                                            mask = scatter_df[hue_col] == cat
-                                            ax.scatter(scatter_df.loc[mask, x_col], scatter_df.loc[mask, y_col],
-                                                    color=palette[i % len(palette)], label=str(cat),
-                                                    alpha=0.6, s=18, edgecolors="none")
-                                        ax.legend(fontsize=7, labelcolor="#8b949e", facecolor="#0d1117", edgecolor="#21262d")
+                                # ---- LINE ----
+                                elif chart_type == "Line Chart":
+                                    fig, ax = plt.subplots(figsize=(7.5, 4.5))
+                                    if color_col:
+                                        for i, cat in enumerate(grouped.columns):
+                                            ax.plot(grouped.index, grouped[cat].values, color=PALETTE[i % len(PALETTE)],
+                                                    linewidth=1.6, marker="o", markersize=3, label=str(cat))
+                                        ax.legend(fontsize=7, labelcolor="#8b949e", facecolor="#0d1117",
+                                                  edgecolor="#21262d", title=color_col, title_fontsize=7)
                                     else:
-                                        ax.scatter(scatter_df[x_col], scatter_df[y_col],
-                                                color="#388bfd", alpha=0.5, s=18, edgecolors="none")
-                                    ax.set_xlabel(x_col)
-                                    ax.set_ylabel(y_col)
-                                    style_ax(fig, ax)
-                                    plt.tight_layout()
-                                    st.pyplot(fig)
-                                    download_chart(fig, "viz_scatter_download")
-                                    plt.close(fig)
-
-                            elif chart_type == "Line Chart":
-                                line_df = plot_df[[x_col, y_col]].dropna().sort_values(x_col)
-                                if line_df.empty:
-                                    banner("warn", "No valid data remains after removing missing values in the selected columns.")
-                                else:
-                                    fig, ax = plt.subplots(figsize=(7, 4))
-                                    ax.plot(line_df[x_col], line_df[y_col], color="#388bfd", linewidth=1.5)
-                                    ax.set_xlabel(x_col)
-                                    ax.set_ylabel(y_col)
-                                    style_ax(fig, ax)
-                                    plt.tight_layout()
-                                    st.pyplot(fig)
+                                        ax.plot(series.index, series.values, color="#388bfd", linewidth=1.8, marker="o", markersize=3)
+                                    ax.set_xlabel(x_col); ax.set_ylabel(f"{agg_label} of {y_col}")
+                                    ax.yaxis.set_major_formatter(FuncFormatter(fmt_large))
+                                    ax.set_title(f"{y_col} Trend by {x_col}" if is_dt_x else title)
+                                    style_chart(fig, ax, rotate_x=is_dt_x or n_cats > 8)
+                                    plt.tight_layout(); st.pyplot(fig)
                                     download_chart(fig, "viz_line_download")
                                     plt.close(fig)
 
-                            elif chart_type == "Violin Plot":
-                                clean_x = plot_df[x_col].dropna()
-                                if clean_x.empty:
-                                    banner("warn", f"<strong>{x_col}</strong> has no non-null values to plot.")
-                                elif clean_x.nunique() < 2:
-                                    banner("warn", f"<strong>{x_col}</strong> has only one distinct value -- a violin plot needs some spread of values.")
+                                # ---- AREA ----
                                 else:
-                                    fig, ax = plt.subplots(figsize=(7, 4))
-                                    sns.violinplot(x=clean_x, ax=ax, color="#388bfd", linecolor="#161b22",
-                                                linewidth=0.8, inner="box")
-                                    ax.set_xlabel(x_col)
-                                    style_ax(fig, ax)
-                                    plt.tight_layout()
-                                    st.pyplot(fig)
-                                    download_chart(fig, "viz_violin_download")
+                                    fig, ax = plt.subplots(figsize=(7.5, 4.5))
+                                    if color_col:
+                                        ax.stackplot(grouped.index, [grouped[c].values for c in grouped.columns],
+                                                     labels=[str(c) for c in grouped.columns],
+                                                     colors=PALETTE[:len(grouped.columns)], alpha=0.85)
+                                        ax.legend(fontsize=7, labelcolor="#8b949e", facecolor="#0d1117",
+                                                  edgecolor="#21262d", title=color_col, title_fontsize=7, loc="upper left")
+                                    else:
+                                        ax.fill_between(series.index, series.values, color="#388bfd", alpha=0.35)
+                                        ax.plot(series.index, series.values, color="#388bfd", linewidth=1.6)
+                                    ax.set_xlabel(x_col); ax.set_ylabel(f"{agg_label} of {y_col}")
+                                    ax.yaxis.set_major_formatter(FuncFormatter(fmt_large))
+                                    ax.set_title(f"{y_col} Trend by {x_col}" if is_dt_x else title)
+                                    style_chart(fig, ax, rotate_x=is_dt_x or n_cats > 8)
+                                    plt.tight_layout(); st.pyplot(fig)
+                                    download_chart(fig, "viz_area_download")
                                     plt.close(fig)
 
-                            elif chart_type == "Pie Chart":
-                                counts = plot_df[x_col].value_counts().head(8)
-                                if counts.empty:
-                                    banner("warn", f"<strong>{x_col}</strong> has no values to plot.")
-                                else:
-                                    pie_colors = ["#388bfd", "#3fb950", "#f78166", "#d29922",
-                                                "#bc8cff", "#79c0ff", "#56d364", "#e3b341"]
-                                    fig, ax = plt.subplots(figsize=(5, 5))
-                                    fig.patch.set_facecolor("#0d1117")
-                                    wedges, texts, autotexts = ax.pie(
-                                        counts.values,
-                                        labels=counts.index.astype(str),
-                                        colors=pie_colors[:len(counts)],
-                                        autopct="%1.1f%%", startangle=140,
-                                        textprops={"color": "#8b949e", "fontsize": 7},
-                                        wedgeprops={"edgecolor": "#0d1117", "linewidth": 1.5}
-                                    )
-                                    for at in autotexts:
-                                        at.set_color("#f0f6fc")
-                                        at.set_fontsize(7)
-                                    ax.set_facecolor("#0d1117")
-                                    plt.tight_layout()
-                                    st.pyplot(fig)
-                                    download_chart(fig, "viz_pie_download")
-                                    plt.close(fig)
-
-                        except Exception as e:
-                            banner("err", f"Error generating chart: {str(e)}")
+                    except Exception as e:
+                        banner("err", f"Error generating chart: {str(e)}")
 
 
     # ---------------- MODEL LAB ----------------
@@ -1624,6 +1997,9 @@ if file is not None:
                 unique_count = df[selected_col].nunique()
                 has_missing  = bool(df[selected_col].isnull().sum() > 0)
                 ohe_blocked  = method == "One Hot Encoding" and unique_count > 25
+                # NEW: manual ordinal mapping only makes sense for a small,
+                # human-typeable set of categories -- same idea as the OHE cap.
+                manual_blocked = method == "Manual (Ordinal)" and unique_count > 20
 
                 # info card
                 st.markdown(
@@ -1647,10 +2023,16 @@ if file is not None:
                         f"<strong>{selected_col}</strong> has {unique_count} unique values "
                         f"(max 25 for OHE). Use Label Encoding instead.",
                     )
+                if manual_blocked:
+                    banner(
+                        "err",
+                        f"<strong>{selected_col}</strong> has {unique_count} unique values "
+                        f"(max 20 for Manual Ordinal Mapping). Use Label Encoding instead.",
+                    )
 
                 # ── Manual ordinal input ──
                 order = ""
-                if method == "Manual (Ordinal)":
+                if method == "Manual (Ordinal)" and not manual_blocked:
                     unique_vals = df[selected_col].dropna().unique().tolist()
                     st.markdown(
                         f'<div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;'
@@ -1667,7 +2049,7 @@ if file is not None:
                     )
 
                 # ── Apply button ──
-                is_disabled = has_missing or ohe_blocked
+                is_disabled = has_missing or ohe_blocked or manual_blocked
                 if st.button("Apply Encoding", key="enc_btn", disabled=is_disabled):
                     working_df = st.session_state.df.copy()
                     series = working_df[selected_col]
@@ -1802,7 +2184,6 @@ if file is not None:
                 mime="text/csv",
                 key="enc_download",
             )
-
  
         # ================= FEATURE IMPORTANCE =================
         with model_tab2:
@@ -2010,7 +2391,6 @@ if file is not None:
                         st.pyplot(fig)
                         download_chart(fig, key="fi_chart_download")
                         plt.close(fig)
-
 
         # ================= MODEL TRAINING =================
         with model_tab3:
