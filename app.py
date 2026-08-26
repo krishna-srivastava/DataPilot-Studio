@@ -53,6 +53,21 @@ def compute_outliers(df, num_cols):
         })
     return rows
 
+def detect_task_type(y, unique_threshold=10):
+    if y.dtype == object or str(y.dtype) == "category":
+        return "Classification"
+
+    n_unique = y.nunique()
+    clean_y  = y.dropna()
+
+    is_integer_like = pd.api.types.is_integer_dtype(y) or (
+        len(clean_y) > 0 and (clean_y % 1 == 0).all()
+    )
+
+    if n_unique <= unique_threshold and is_integer_like:
+        return "Classification"
+    return "Regression"
+
 @st.cache_data
 def load_data(file_bytes):
     if not file_bytes or len(file_bytes.strip()) == 0:
@@ -1549,9 +1564,6 @@ if file is not None:
                 return s
 
             def low_cardinality_cat_cols(exclude_col=None, max_unique=MAX_LEGEND_CATEGORIES):
-                """Categorical columns safe to use for a legend/hue/color-by dropdown --
-                excludes columns whose cardinality would blow up the chart (e.g. an ID column
-                with thousands of unique values) instead of only truncating after the fact."""
                 candidates = [c for c in cat_cols if c != exclude_col]
                 safe    = [c for c in candidates if 2 <= df[c].nunique() <= max_unique]
                 skipped = [c for c in candidates if c not in safe]
@@ -2205,17 +2217,16 @@ if file is not None:
                     "Feature Importance.",
                 )
             else:
-                # ── 1. Configuration ──
                 eyebrow("Configuration")
-
                 cfg1, cfg2 = st.columns(2)
+
                 with cfg1:
                     target_col = st.selectbox(
                         "Select Target Column (Y)", num_cols, key="fi_target"
                     )
                 feature_cols = [c for c in num_cols if c != target_col]
 
-                MAX_ROWS = 20_000
+                MAX_ROWS = 100_000
                 is_large = len(df) > MAX_ROWS
 
                 with cfg2:
@@ -2225,7 +2236,8 @@ if file is not None:
                     )
 
                 target_unique = df[target_col].nunique()
-                is_classifier = target_unique <= 10
+                is_classifier = detect_task_type(df[target_col], 10) == "Classification"
+
                 model_label   = "Classifier" if is_classifier else "Regressor"
                 model_color   = "#d29922" if is_classifier else "#388bfd"
 
@@ -2394,7 +2406,7 @@ if file is not None:
 
         # ================= MODEL TRAINING =================
         with model_tab3:
-            df           = st.session_state.df
+            df = st.session_state.df
             has_missing  = df.isnull().sum().sum() > 0
             non_numeric  = df.select_dtypes(exclude=[np.number, "bool"]).columns.tolist()
             too_few_cols = len(df.columns) < 2
@@ -2408,15 +2420,11 @@ if file is not None:
             else:
                 df = df.replace({True: 1, False: 0})
 
-                MAX_ROWS = 20_000
-                # FIX: was 15, now 10 — matches Feature Importance tab's
-                # is_classifier threshold so the same target column is
-                # classified the same way in both tabs.
+                MAX_ROWS = 100_000
                 CLASSIFICATION_UNIQUE_THRESHOLD = 10
 
                 # ── 1. Target + Task Detection ──
                 eyebrow("Target Column")
-
                 target = st.selectbox("Select Target (Y)", df.columns, key="train_target")
                 X = df.drop(columns=[target])
                 y = df[target]
@@ -2424,7 +2432,7 @@ if file is not None:
                 if X.shape[1] == 0:
                     banner("err", "No feature columns left after selecting target — dataset needs at least <strong>2 columns</strong>.")
                 else:
-                    task_type  = "Classification" if (y.dtype == object or y.nunique() <= CLASSIFICATION_UNIQUE_THRESHOLD) else "Regression"
+                    task_type  = detect_task_type(y, CLASSIFICATION_UNIQUE_THRESHOLD)
                     task_color = "#d29922" if task_type == "Classification" else "#388bfd"
                     is_large   = len(X) > MAX_ROWS
                     is_highdim = X.shape[1] > 100
@@ -2476,9 +2484,9 @@ if file is not None:
                     eyebrow("Select Model")
 
                     if task_type == "Regression":
-                        model_list = ["Linear Regression", "KNN", "SVM", "Decision Tree", "Random Forest"]
+                        model_list = ["Linear Regression", "KNN", "Decision Tree", "Random Forest"]
                     else:
-                        model_list = ["Logistic Regression", "KNN", "SVM", "Decision Tree", "Random Forest"]
+                        model_list = ["Logistic Regression", "KNN", "Decision Tree", "Random Forest"]
 
                     if XGBOOST_OK:
                         model_list.append("XGBoost")
@@ -2497,7 +2505,7 @@ if file is not None:
 
                     # ── 4. Hyperparameter Tuning ──
                     hp = {}
-                    hyper_models = ["Decision Tree", "Random Forest", "SVM", "XGBoost", "LightGBM"]
+                    hyper_models = ["Decision Tree", "Random Forest", "XGBoost", "LightGBM"]
 
                     if model_name in hyper_models:
                         enable_tuning = st.toggle("Enable Hyperparameter Tuning", value=False, key="hp_toggle")
@@ -2520,17 +2528,6 @@ if file is not None:
                                 hp["min_samples_leaf"] = c4.slider("Min Samples Leaf", 1, 20, 2)
                                 st.caption("Tip: Start with 100–200 trees. Max Depth 5–10 works well.")
 
-                            elif model_name == "SVM":
-                                c1, c2, c3 = st.columns(3)
-                                hp["C"] = c1.select_slider(
-                                    "C (Regularization)",
-                                    options=[0.01, 0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0],
-                                    value=1.0, help="Higher C = less regularization",
-                                )
-                                hp["kernel"] = c2.selectbox("Kernel", ["rbf", "linear", "poly", "sigmoid"], help="rbf works best for most cases")
-                                hp["gamma"] = c3.selectbox("Gamma", ["scale", "auto"], help="scale = 1/(n_features * X.var())")
-                                st.caption("Tip: rbf kernel with C=1.0 is a safe start.")
-
                             elif model_name == "XGBoost":
                                 c1, c2, c3, c4 = st.columns(4)
                                 hp["n_estimators"] = c1.slider("N Estimators", 50, 500, 150, step=50)
@@ -2552,8 +2549,6 @@ if file is not None:
                                 hp = {"max_depth": 5, "min_samples_split": 5, "min_samples_leaf": 2}
                             elif model_name == "Random Forest":
                                 hp = {"n_estimators": 150, "max_depth": 7, "min_samples_split": 5, "min_samples_leaf": 2}
-                            elif model_name == "SVM":
-                                hp = {"C": 1.0, "kernel": "rbf", "gamma": "scale"}
                             elif model_name == "XGBoost":
                                 hp = {"n_estimators": 150, "max_depth": 6, "learning_rate": 0.1, "subsample": 1.0}
                             elif model_name == "LightGBM":
@@ -2594,7 +2589,7 @@ if file is not None:
                                     X_s, y_s, test_size=test_size, random_state=42, stratify=stratify_arg
                                 )
 
-                                needs_scale = model_name in ["KNN", "SVM", "Linear Regression", "Logistic Regression"]
+                                needs_scale = model_name in ["KNN", "Linear Regression", "Logistic Regression"]
                                 scaler = None
                                 if needs_scale or is_highdim:
                                     scaler  = StandardScaler()
@@ -2629,14 +2624,6 @@ if file is not None:
                                         else KNeighborsRegressor(n_neighbors=k, weights="distance")
                                     )
 
-                                elif model_name == "SVM":
-                                    from sklearn.svm import SVC, SVR
-                                    model = (
-                                        SVC(kernel=hp["kernel"], C=hp["C"], gamma=hp["gamma"], probability=True)
-                                        if task_type == "Classification"
-                                        else SVR(kernel=hp["kernel"], C=hp["C"], gamma=hp["gamma"])
-                                    )
-
                                 elif model_name == "Decision Tree":
                                     from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
                                     model = (
@@ -2648,9 +2635,6 @@ if file is not None:
                                     )
 
                                 elif model_name == "XGBoost":
-                                    # FIX: use_label_encoder was removed in xgboost>=2.0 —
-                                    # passing it now raises a TypeError and would kill
-                                    # training. Dropped it here.
                                     model = (
                                         XGBClassifier(
                                             n_estimators=hp.get("n_estimators", 150), max_depth=hp.get("max_depth", 6),
