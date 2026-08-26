@@ -78,7 +78,7 @@ The app is organized into two labs: **🔭 EDA Lab** for exploring and cleaning 
 
 ### 🎯 Training Tab
 - Auto-detects Classification vs Regression from the selected target
-- **Models:** Linear/Logistic Regression, KNN, SVM, Decision Tree, Random Forest, **XGBoost**, **LightGBM** (XGBoost/LightGBM auto-hide if not installed)
+- **Models:** Linear/Logistic Regression, KNN, Decision Tree, Random Forest, **XGBoost**, **LightGBM** (XGBoost/LightGBM auto-hide if not installed)
 - Adjustable train/test split with row-count preview
 - **Hyperparameter tuning** per model (max depth, n_estimators, learning rate, kernel, etc.) with sensible defaults when tuning is off
 - Auto-scaling for distance-based models, auto-PCA for high-dimensional data (>100 features, 90% variance retained)
