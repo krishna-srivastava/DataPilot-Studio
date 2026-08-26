@@ -74,7 +74,7 @@ The app is organized into two labs: **🔭 EDA Lab** for exploring and cleaning 
 - Auto-detects Classification vs Regression based on target uniqueness
 - Runs a Random Forest to rank every feature by importance
 - Top-3 feature podium, full ranked table with cumulative %, and a bar chart
-- Auto-samples large datasets (>20,000 rows) for speed
+- Auto-samples large datasets (>100,000 rows) for speed
 
 ### 🎯 Training Tab
 - Auto-detects Classification vs Regression from the selected target
