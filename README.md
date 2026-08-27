@@ -39,9 +39,9 @@ The app is organized into two labs: **🔭 EDA Lab** for exploring and cleaning 
 - Missing values table (only affected columns shown)
 - **Smart fill** — Mean/Median/Mode for numeric, Mode only for categorical
 - **Custom value fill** — Enter any value manually
-- **Rename columns**
+- **Add Column (From Ranges)** — Bucket a numeric column into labeled ranges (e.g. Age → Children / Young / Adult)
 - **Delete columns** (disabled when only one column remains)
-- **Tab-scoped Undo** — Step-by-step undo for fill/rename/delete actions on this tab only
+- **Tab-scoped Undo** — Step-by-step undo for fill/add-column/delete actions on this tab only
 - Reset to original dataset
 - Download cleaned CSV
 
@@ -54,10 +54,10 @@ The app is organized into two labs: **🔭 EDA Lab** for exploring and cleaning 
 - Download cleaned CSV
 
 ### 📈 Visualization Tab
-- 7 chart types: Histogram, Box Plot, Bar Chart, Scatter Plot, Line Chart, Violin Plot, Pie Chart
+- 7 chart types: Bar Chart, Line Chart, Area Chart, Scatter Plot, Histogram, Box Plot, Pie Chart
 - **Auto column filter** — Only valid columns shown per chart type (no more wrong column errors)
-- Color-by (hue) support for Scatter Plot
-- Auto sampling for large datasets (>10,000 rows)
+- Color/Legend (hue) support for Bar, Line, Area, and Scatter charts
+- Auto sampling for large datasets (Scatter Plot samples down to 10,000 points for smooth rendering)
 - Graceful handling of empty/constant columns instead of crashing
 - Download any chart as PNG
 
@@ -71,17 +71,18 @@ The app is organized into two labs: **🔭 EDA Lab** for exploring and cleaning 
 - Download encoded CSV
 
 ### 🌲 Feature Importance Tab
-- Auto-detects Classification vs Regression based on target uniqueness
+- Auto-detects Classification vs Regression using dtype + integer-check heuristic (not just raw uniqueness)
 - Runs a Random Forest to rank every feature by importance
 - Top-3 feature podium, full ranked table with cumulative %, and a bar chart
 - Auto-samples large datasets (>100,000 rows) for speed
 
 ### 🎯 Training Tab
-- Auto-detects Classification vs Regression from the selected target
+- Auto-detects Classification vs Regression from the selected target (dtype + integer-check heuristic)
 - **Models:** Linear/Logistic Regression, KNN, Decision Tree, Random Forest, **XGBoost**, **LightGBM** (XGBoost/LightGBM auto-hide if not installed)
 - Adjustable train/test split with row-count preview
-- **Hyperparameter tuning** per model (max depth, n_estimators, learning rate, kernel, etc.) with sensible defaults when tuning is off
-- Auto-scaling for distance-based models, auto-PCA for high-dimensional data (>100 features, 90% variance retained)
+- **Hyperparameter tuning** per model (max depth, n_estimators, learning rate, num leaves, etc.) with sensible defaults when tuning is off
+- Auto-scaling for distance/linear-based models, auto-PCA for high-dimensional data (>100 features, 90% variance retained)
+- Auto-samples large datasets (>100,000 rows) for speed
 - **Stratified train/test split** for classification when every class has enough samples
 - Regression results: R², MAE, MSE, RMSE + Actual vs Predicted plot
 - Classification results: Accuracy, full classification report, confusion matrix
