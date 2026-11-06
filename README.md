@@ -1,6 +1,6 @@
 # 🛸 DataPilot Studio  
 > **Upload CSV → Explore & Clean → Train Models**
-
+ 
 A powerful, dark-themed **EDA + Data Cleaning + Model Training** web app built with Python & Streamlit. Designed for data analysts, students, and ML practitioners who want to go from raw CSV to a trained, downloadable model — no code required.
 
 The app is organized into two labs: **🔭 EDA Lab** for exploring and cleaning your data, and **🤖 Model Lab** for encoding, feature importance, and training ML models.
